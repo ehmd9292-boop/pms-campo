@@ -1,0 +1,1 @@
+{"name": "PMS BTS Campo", "short_name": "PMS Campo", "start_url": "./Campo.html", "scope": "./", "display": "standalone", "background_color": "#ffffff", "theme_color": "#1E88E5", "description": "Registro de campo del PMS Brice\u00f1o-Tunja-Sogamoso (funciona sin conexi\u00f3n)", "icons": [{"src": "icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]}
