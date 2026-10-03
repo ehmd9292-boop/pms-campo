@@ -45,8 +45,13 @@ function cargarDatos(){const t0=Date.now();$('kpi').innerHTML='Cargando datos…
  const J=u=>fetch(u).then(r=>{if(!r.ok)throw new Error(u.split('/').pop()+' '+r.status);return r.json();});
  fetch('datos/'+DATA+'_version.json').then(r=>r.ok?r.json():null).catch(()=>null).then(v=>{
   // fichas: en partes (Campo_fichas_1.json…) si la versión las lista; si no, el archivo único
-  const pf=(v&&v.fichas_partes&&v.fichas_partes.length)?Promise.all(v.fichas_partes.map(n=>J('datos/'+n))).then(ps=>Object.assign({},...ps)).catch(()=>J('datos/'+DATA+'_fichas.json')):J('datos/'+DATA+'_fichas.json');
-  return Promise.all([pf,J('datos/'+DATA+'_plan.json'),Promise.resolve(v)]);})
+  // comprimido (.json.gz) si el navegador sabe descomprimir y la versión lo lista; si falla, las partes sin comprimir; si falla, el archivo único
+  const GZ=u=>fetch(u).then(r=>{if(!r.ok)throw new Error(u.split('/').pop()+' '+r.status);return new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).json();});
+  const puedeGz=typeof DecompressionStream!=='undefined';
+  const pfPartes=()=>(v&&v.fichas_partes&&v.fichas_partes.length)?Promise.all(v.fichas_partes.map(n=>J('datos/'+n))).then(ps=>Object.assign({},...ps)).catch(()=>J('datos/'+DATA+'_fichas.json')):J('datos/'+DATA+'_fichas.json');
+  const pf=(puedeGz&&v&&v.fichas_partes_gz&&v.fichas_partes_gz.length)?Promise.all(v.fichas_partes_gz.map(n=>GZ('datos/'+n))).then(ps=>Object.assign({},...ps)).catch(pfPartes):pfPartes();
+  const pp=(puedeGz&&v&&v.plan_gz)?GZ('datos/'+v.plan_gz).catch(()=>J('datos/'+DATA+'_plan.json')):J('datos/'+DATA+'_plan.json');
+  return Promise.all([pf,pp,Promise.resolve(v)]);})
  .then(([f,d,v])=>{FICHA=f;DATOS=d;VERSION=v;initDatos();const vv=$('ver');if(vv){const dd=v?Math.round((Date.now()-new Date(v.generado.replace(' ','T')))/864e5):null;vv.textContent='datos del '+(v?v.generado:'—')+(v?' · '+v.secciones+' secciones · '+v.fotos+' fotos':'')+' · cargados en '+((Date.now()-t0)/1000).toFixed(1)+' s'+(dd!=null&&dd>30?' · ⚠ datos de hace '+dd+' días: pida al PC que publique de nuevo (Publicar_Celular.bat)':'');vv.style.color=(dd!=null&&dd>30)?'#b71c1c':'#777';}})
  .catch(e=>{$('kpi').innerHTML='<span style="color:#b71c1c">No se pudieron cargar los datos ('+e.message+'). Con conexión, vuelva a abrir la página o toque ⬇ Sin conexión para guardarlos en el celular.</span>';});}
 function llenarAnios(){anioSel.innerHTML='';Object.keys(DATOS[escSel.value]).forEach(a=>{const o=document.createElement('option');o.value=a;o.text=a;anioSel.add(o);});}
