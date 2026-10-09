@@ -336,7 +336,9 @@ function campoHtml(cod){const f=FICHA[cod];const usr=localStorage.getItem('pms_u
  <div style="margin-top:4px">Tramo: PR inicial <input id="cpri" style="width:64px" placeholder="${prTxt(f.pri)}" onchange="prVerificar()"> <button type="button" onclick="prGps('i')" title="tomar del GPS">📍</button>
   PR final <input id="cprf" style="width:64px" placeholder="${prTxt(f.prf||f.pri+f.L)}"> <button type="button" onclick="prGps('f')" title="tomar del GPS">📍</button> <span style="color:#666;font-size:11px">(vacío = toda la sección ${prTxt(f.pri)}–${prTxt(f.prf||f.pri+f.L)}; puede cruzar a la sección vecina)</span></div>
  <div style="margin-top:4px">Fecha <input id="cfecha" type="date" style="width:125px"> <input id="cobs" placeholder="observación (o dicte con 🎤)" style="width:45%"> <button type="button" id="bvoz" onclick="notaVoz()" style="background:#1E88E5;color:#fff;border:0;border-radius:6px;padding:5px 8px">🎤 Nota de voz</button><div id="cvozn" style="color:#2e7d32;font-size:11px"></div></div>
- <div style="margin-top:4px">Fotos <input id="cfoto" type="file" accept="image/*" capture="environment" multiple onchange="fotosArchivo(this)"> <button type="button" onclick="fotoGuiada()" style="background:#1E88E5;color:#fff;border:0;border-radius:6px;padding:5px 9px">📷 Cámara guiada</button> <div id="cfotosn" style="color:#2e7d32;font-size:11px"></div></div>
+ <div style="margin-top:4px"><button type="button" onclick="fotoGuiada()" style="background:#1E88E5;color:#fff;border:0;border-radius:6px;padding:9px 14px;font-size:14px;font-weight:bold">📷 Tomar foto (cámara guiada)</button> <span style="font-size:10px;color:#666">encuadre → regla de 1 m → puntos</span>
+  <details style="margin-top:3px"><summary style="font-size:11px;color:#666">📁 Agregar fotos de la galería (solo de apoyo, sin medición)</summary><input id="cfoto" type="file" accept="image/*" multiple onchange="fotosArchivo(this)"></details>
+  <div id="cfotosn" style="color:#2e7d32;font-size:11px"></div></div>
  <div style="margin-top:6px"><button type="button" onclick="guardarCampo('${cod}')" style="background:#1E88E5;color:#fff;border:0;border-radius:6px;padding:7px 14px;font-size:13px">Guardar</button> <span id="cmsg" style="color:#2e7d32"></span></div>`;
  const nAb=dlist.filter(d=>d.estado=='abierto'||d.estado=='reabierto').length;
  h+=D(titI,hI||'<div style="color:#666;font-size:11px">Sin intervenciones registradas en esta sección.</div>',true);
@@ -363,12 +365,14 @@ function guardarCampo(cod){const f=FICHA[cod];const tipo=$('ctipo').value;const 
  let pri=prNum($('cpri').value),prf=prNum($('cprf').value);if(pri==null&&prf==null){pri=f.pri;prf=f.prf||f.pri+f.L;}else{if(pri==null)pri=f.pri;if(prf==null)prf=pri;if(prf<pri){const x=pri;pri=prf;prf=x;}}
  const rec={id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),codigo:cod,trayecto:f.t,calzada:f.cz,carril:f.car,tipo:tipo,usuario:usr,fecha:$('cfecha').value,pr_ini:pri,pr_fin:prf,observacion:$('cobs').value,registrado:new Date().toISOString(),lat:ultimaPos?ultimaPos[0]:null,lon:ultimaPos?ultimaPos[1]:null,gps_prec:gpsPrec,pr_digitado:prNum($('cpri').value),pr_gps:prGpsAuto,contratista:($('ccontr')?$('ccontr').value:''),contrato:($('ccontrato')?$('ccontrato').value:''),fotos:[]};
  if(tipo=='obra'){const a=ACTIV[+$('cact').value];rec.actividad=a[0];rec.unidad=a[1];rec.cantidad=+$('ccant').value||null;rec.espesor_cm=a[2]?(+$('cespv').value||null):null;rec.capa_slurry=$('ccapaw').style.display!='none'?(+$('ccapa').value||1):null;rec.costo_real=+$('ccosto').value||null;rec.mitigacion=a[3]?1:0;
-  if(!rec.cantidad){alert('Escribe la cantidad ejecutada ('+a[1]+').');return;}if(a[2]&&!rec.espesor_cm){alert('Escribe el espesor (cm).');return;}}
+  if(!rec.cantidad){alert('Escribe la cantidad ejecutada ('+a[1]+').');return;}if(a[2]&&!rec.espesor_cm){alert('Escribe el espesor (cm).');return;}
+  if(!fotosGuiadasMeta.some(m=>m&&m.medida&&!m.medida.apoyo)&&!RELAJAR_FOTO){alert('Para registrar la obra tome al menos una foto con 📷 Cámara guiada (regla de 1 m y puntos de lo ejecutado; si se paga por unidad, la app lo permite sin medida).');return;}}
  else if(tipo=='dano'){rec.dano_tipo=$('cdtipo').value;rec.severidad=$('csev').value;const n=rec.dano_tipo.split('.')[0];if(LINEALES.has(n)){rec.medida=+$('cml').value||null;rec.unidad='ml';}else{const l=+$('clargo').value||0,w=+$('cancho').value||0;rec.largo=l||null;rec.ancho=w||null;rec.medida=l&&w?+(l*w).toFixed(2):null;rec.unidad='m2';}rec.urgente=$('curg').checked?1:0;rec.profundidad_cm=+$('cprof').value||null;
   if(!rec.medida){alert('Escribe la medida del daño.');return;}
-  const conMed=fotosGuiadasMeta.some(m=>m&&m.medida);if(!conMed&&!(RELAJAR_FOTO)){alert('Para registrar un daño la PRIMERA foto debe tomarse con 📷 Cámara guiada y marcar en ella la regla de 1 m y los puntos del daño. Así la medida queda verificable y la IA puede calibrarla. Tome la foto con la cámara guiada.');return;}}
+  const conMed=fotosGuiadasMeta.some(m=>m&&m.medida&&!m.medida.apoyo&&!m.medida.sin_medida);if(!conMed&&!(RELAJAR_FOTO)){alert('Para registrar un daño la PRIMERA foto debe tomarse con 📷 Cámara guiada y marcar en ella la regla de 1 m y los puntos del daño. Así la medida queda verificable y la IA puede calibrarla. Tome la foto con la cámara guiada.');return;}}
  else if(tipo=='atencion'){const a=ACTIV[+$('caact').value];rec.dano_id=$('cdid').value;rec.actividad=a[0];rec.unidad=a[1];rec.cantidad=+$('cacant').value||null;rec.espesor_cm=a[2]?(+$('caespv').value||null):null;rec.mitigacion=a[3]?1:0;
-  if(!rec.dano_id){alert('No hay daños reportados abiertos en esta sección.');return;}if(!rec.cantidad){alert('Escribe la cantidad ejecutada.');return;}}
+  if(!rec.dano_id){alert('No hay daños reportados abiertos en esta sección.');return;}if(!rec.cantidad){alert('Escribe la cantidad ejecutada.');return;}
+  if(!fotosGuiadasMeta.some(m=>m&&m.medida&&!m.medida.apoyo)&&!RELAJAR_FOTO){alert('Para registrar la atención tome al menos una foto con 📷 Cámara guiada de lo reparado (regla de 1 m y puntos).');return;}}
  else if(tipo=='drenaje'){if(!drenGuardar(rec))return;}
  if(!rec.fecha){alert('Escribe la fecha.');return;}
  $('cmsg').textContent='guardando…';
@@ -404,7 +408,8 @@ function camHtml(){return `<div id="cam" style="position:fixed;inset:0;z-index:3
   <button onclick="camCerrar()" style="background:#fff;border:0;border-radius:40px;padding:14px 18px;font-size:16px;margin-left:10px">✕ Salir</button>
  </div></div>`;}
 function camMime(){for(const m of ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4']){if(window.MediaRecorder&&MediaRecorder.isTypeSupported(m))return m;}return '';}
-async function camAbrir(modo,cb){if(fichaAbierta&&fichaCod)FICHA_TOCADA=fichaCod;if(!$('cam'))document.body.insertAdjacentHTML('beforeend',camHtml());CAM.modo=modo;CAM.cb=cb||null;
+async function camAbrir(modo,cb,ctx){if(fichaAbierta&&fichaCod)FICHA_TOCADA=fichaCod;if(!$('cam'))document.body.insertAdjacentHTML('beforeend',camHtml());CAM.modo=modo;CAM.cb=cb||null;
+ if(modo=='foto'){CAM.fotos=[];CAM.ctx=ctx||{tipo:($('ctipo')?$('ctipo').value:'dano'),n:0};}      // v94: el contador es por registro (antes nunca se reiniciaba y solo la 1.ª foto de la sesión pedía regla y puntos)
  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('Este navegador no permite usar la cámara desde la página (necesita https). Use la cámara del celular y adjunte el archivo.');return;}
  try{CAM.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:(localStorage.getItem('pms_video_cal')||'1080')=='1080'?1920:1280},height:{ideal:(localStorage.getItem('pms_video_cal')||'1080')=='1080'?1080:720},frameRate:{ideal:30}},audio:false});}
  catch(e){alert('No se pudo abrir la cámara: '+e.message);return;}
@@ -469,8 +474,10 @@ function camFoto(){const v=$('camv');const cv=document.createElement('canvas');c
   <div style="display:flex;gap:14px"><button type="button" id="camok" style="background:#2e7d32;color:#fff;border:0;border-radius:8px;padding:12px 22px;font-size:16px">✓ Aceptar</button><button type="button" id="camno" style="background:#d32f2f;color:#fff;border:0;border-radius:8px;padding:12px 22px;font-size:16px">✗ Repetir</button></div>`;
  pv.style.display='flex';
  $('camok').onclick=()=>{pv.style.display='none';CAM.fotos.push(d);CAM.ultimaMeta=meta;$('cammsg').textContent='Foto '+CAM.fotos.length+' guardada. Puede tomar otra o Salir.';
-  const esDano=$('ctipo')&&$('ctipo').value=='dano'&&CAM.fotos.length==1;     // la primera foto del daño: medir sobre la imagen
-  if(esDano){camMedir(d,meta,res=>{if(res===false)return;if(res)CAM.ultimaMeta=Object.assign({},meta,{medida:res});if(CAM.cb)CAM.cb(d);});}else if(CAM.cb)CAM.cb(d);};
+  // v94: TODAS las fotos tomadas para un registro pasan por el asistente (encuadre → regla de 1 m → puntos). La primera de cada registro es
+  // obligatoria; las siguientes pueden marcarse como "foto de apoyo" (vista general) sin medir.
+  const ctx=CAM.ctx||{};const oblig=((ctx.n||0)+CAM.fotos.length)==1;
+  if(CAM.modo=='foto'&&CAM.cb){camMedir(d,meta,res=>{if(res===false)return;if(res)CAM.ultimaMeta=Object.assign({},meta,{medida:res});if(CAM.cb)CAM.cb(d);},{oblig:oblig,tipo:ctx.tipo||'dano'});}else if(CAM.cb)CAM.cb(d);};
  $('camno').onclick=()=>{pv.style.display='none';$('cammsg').textContent='Foto descartada. Encuadre de nuevo y vuelva a capturar.';};}
 function camCerrar(){if(CAM.rec&&CAM.rec.state=='recording'){if(!confirm('Está grabando. ¿Detener y salir?'))return;camDetener();}
  if(CAM.timer){clearInterval(CAM.timer);CAM.timer=null;}window.removeEventListener('deviceorientation',camOrient);if(CAM.stream){CAM.stream.getTracks().forEach(t=>t.stop());CAM.stream=null;}
@@ -484,7 +491,7 @@ function fotosRender(){const n=$('cfotosn');if(!n)return;let h='';fotosGuiadas.f
  fotosSel.forEach((d,i)=>{h+=`<span style="position:relative;display:inline-block;margin:2px"><img src="${d}" style="width:72px;height:54px;object-fit:cover;border-radius:4px;border:2px solid #999" onclick="verFoto(this.src)"><b onclick="fotosSel.splice(${i},1);fotosRender()" style="position:absolute;top:-6px;right:-6px;background:#d32f2f;color:#fff;border-radius:10px;width:18px;height:18px;text-align:center;line-height:18px;font-size:12px">✕</b></span>`;});
  n.innerHTML=h?('<div style="margin-top:3px">'+h+'<div style="color:#666;font-size:11px">'+(fotosGuiadas.length+fotosSel.length)+' foto(s) listas; toque ✕ para quitar una</div></div>'):'';}
 function fotosArchivo(inp){const files=[...(inp.files||[])];if(!files.length)return;$('cmsg').textContent='leyendo fotos…';fotosB64(files,fs=>{fotosSel=fotosSel.concat(fs);inp.value='';$('cmsg').textContent='';fotosRender();});}
-function fotoGuiada(){camAbrir('foto',d=>{fotosGuiadas.push(d);fotosGuiadasMeta.push(CAM.ultimaMeta||null);fotosRender();});}
+function fotoGuiada(){camAbrir('foto',d=>{fotosGuiadas.push(d);fotosGuiadasMeta.push(CAM.ultimaMeta||null);fotosRender();},{tipo:($('ctipo')?$('ctipo').value:'dano'),n:fotosGuiadas.length});}
 
 // ================= ENCUADRE DEL DAÑO EN VIVO: detector YOLO (RDD2022) corriendo en el celular con onnxruntime-web =================
 // El modelo (datos/modelo_danos.onnx, 320 px) lo exporta el PC con Exportar_Modelo_Web.bat. Si no está, la cámara guiada funciona como antes (marco fijo).
@@ -540,20 +547,28 @@ const HFOV_DEF=65;   // ángulo horizontal típico de la cámara trasera del cel
 function sueloXY(u,v,W,H,tilt,h,hfov){const fx=(W/2)/Math.tan((hfov||HFOV_DEF)*Math.PI/360),fy=fx;const x=(u-W/2)/fx,y=(v-H/2)/fy;const p=tilt*Math.PI/180;const den=y*Math.cos(p)+Math.sin(p);if(den<=1e-4)return null;const t=h/den;return [t*x,t*(Math.cos(p)-y*Math.sin(p))];}
 function areaPoligono(P){let a=0;for(let i=0;i<P.length;i++){const [x1,y1]=P[i],[x2,y2]=P[(i+1)%P.length];a+=x1*y2-x2*y1;}return Math.abs(a)/2;}
 let MED={pts:[],regla:[],modo:'dano',img:null,W:0,H:0,tilt:null,alt:1.2,cb:null,lineal:false};
-function camMedir(dataUrl,meta,cb){MED={pts:[],regla:[],modo:'regla',paso:1,sinRegla:false,img:null,W:meta.w,H:meta.h,tilt:(meta.tilt!=null?meta.tilt:55),alt:meta.alt||1.2,cb:cb,dataUrl:dataUrl,lineal:$('cdtipo')?LINEALES.has($('cdtipo').value.split('.')[0]):false};
+function medUnidad(tipo){try{if(tipo=='obra'&&$('cact'))return ACTIV[+$('cact').value][1];if(tipo=='atencion'&&$('caact'))return ACTIV[+$('caact').value][1];}catch(e){}return tipo=='dano'?($('cdtipo')&&LINEALES.has($('cdtipo').value.split('.')[0])?'ml':'m2'):'m2';}
+const MED_OBJ={dano:'el daño',atencion:'lo reparado',obra:'lo ejecutado',drenaje:'el elemento de drenaje',verificacion:'la reparación'};
+function camMedir(dataUrl,meta,cb,op){op=op||{};const tipo=op.tipo||($('ctipo')?$('ctipo').value:'dano');const und=String(medUnidad(tipo)||'').toLowerCase();
+ MED={pts:[],regla:[],modo:'regla',paso:1,sinRegla:false,img:null,W:meta.w,H:meta.h,tilt:(meta.tilt!=null?meta.tilt:55),alt:meta.alt||1.2,cb:cb,dataUrl:dataUrl,lineal:/^ml$|^m$/.test(und),
+      oblig:op.oblig!==false,tipo:tipo,und:und,porUnidad:!/^(m2|m²|ml|m|m3|m³)$/.test(und),obj:MED_OBJ[tipo]||'el daño'};
  let v=$('medbox');if(!v){v=document.createElement('div');v.id='medbox';v.style.cssText='position:fixed;inset:0;background:#000;z-index:3100;display:flex;flex-direction:column';document.body.appendChild(v);}
  v.innerHTML=`<div id="medtop" style="color:#fff;font:13px Arial;padding:8px;background:#222">${MED.lineal?'Toque los DOS extremos de la grieta':'Toque las 4 ESQUINAS del daño (en orden, alrededor)'} · inclinación ${MED.tilt}° · altura ${MED.alt} m</div>
   <div style="flex:1;position:relative;overflow:hidden"><img id="medimg" src="${dataUrl}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain"><svg id="medsvg" style="position:absolute;inset:0;width:100%;height:100%"></svg></div>
   <div id="medres" style="color:#fff;font:14px Arial;padding:6px 8px;background:#222;min-height:22px"></div>
   <div id="medbtns" style="display:flex;gap:6px;padding:8px;background:#222;flex-wrap:wrap"></div>`;
  v.style.display='flex';$('medimg').onclick=medToque;$('medsvg').onclick=medToque;medPaso(1);}
-// Asistente en dos pasos, obligatorio para la primera foto de un daño: (1) regla de 1 m, (2) puntos del daño. No hay "saltar": o se completa o se repite la foto.
+// Asistente en dos pasos para TODAS las fotos de un registro (daño, atención, obra, drenaje, verificación): (1) regla de 1 m, (2) puntos.
+// La primera foto de cada registro es obligatoria (no hay "saltar": o se completa o se repite). Las siguientes pueden ir como "foto de apoyo".
 function medPaso(n){MED.paso=n;const B=$('medbtns');const btn=(t,fn,col,flex)=>`<button type="button" onclick="${fn}" style="${flex?'flex:1;':''}padding:10px;border:0;border-radius:8px;background:${col};color:#fff;font-weight:bold">${t}</button>`;
- if(n==1){MED.modo='regla';$('medtop').innerHTML='<b>PASO 1 de 2 · Regla de 1 m.</b> Toque los DOS extremos del flexómetro o regla que puso en el piso junto al daño.';
-  B.innerHTML=btn('↶ Deshacer','medDeshacer()','#555')+btn('✓ Regla marcada → paso 2','medReglaOk()','#2e7d32',1)+btn('No puse regla','medSinRegla()','#8d6e63')+btn('✗ Repetir foto','medCerrar(null,true)','#b71c1c');}
- else{MED.modo='dano';$('medtop').innerHTML=`<b>PASO 2 de 2 · Daño.</b> ${MED.lineal?'Toque los DOS extremos de la grieta.':'Toque las 4 ESQUINAS del daño, en orden alrededor (1→2→3→4).'}${MED.sinRegla?' <span style="color:#ffb74d">Sin regla: la medida será estimada por geometría.</span>':''}`;
-  B.innerHTML=btn('↶ Deshacer','medDeshacer()','#555')+btn('← Regla','medPaso(1)','#555')+btn('✓ Guardar foto y medida','medListo()','#2e7d32',1)+btn('✗ Repetir foto','medCerrar(null,true)','#b71c1c');}
+ if(n==1){MED.modo='regla';$('medtop').innerHTML='<b>PASO 1 de 2 · Regla de 1 m.</b> Toque los DOS extremos del flexómetro o regla de 1 m que puso en el piso junto a '+MED.obj+'.';
+  B.innerHTML=btn('↶ Deshacer','medDeshacer()','#555')+btn('✓ Regla marcada → paso 2','medReglaOk()','#2e7d32',1)+btn('No puse regla','medSinRegla()','#8d6e63')+btn('✗ Repetir foto','medCerrar(null,true)','#b71c1c')+medExtras();}
+ else{MED.modo='dano';$('medtop').innerHTML=`<b>PASO 2 de 2 · Medir ${MED.obj}.</b> ${MED.lineal?'Toque los DOS extremos (inicio y fin) de '+MED.obj+'.':'Toque las 4 ESQUINAS de '+MED.obj+', en orden alrededor (1→2→3→4).'}${MED.sinRegla?' <span style="color:#ffb74d">Sin regla: la medida será estimada por geometría.</span>':''}`;
+  B.innerHTML=btn('↶ Deshacer','medDeshacer()','#555')+btn('← Regla','medPaso(1)','#555')+btn('✓ Guardar foto y medida','medListo()','#2e7d32',1)+btn('✗ Repetir foto','medCerrar(null,true)','#b71c1c')+medExtras();}
  medDibujar();medCalcular();}
+function medExtras(){const b=(t,fn,col)=>`<button type="button" onclick="${fn}" style="flex:1 1 100%;padding:9px;border:0;border-radius:8px;background:${col};color:#fff">${t}</button>`;let h='';
+ if(MED.porUnidad)h+=b('Esta actividad se paga por '+(MED.und||'unidad')+': guardar la foto sin medida','medCerrar({sin_medida:true,unidad:MED.und})','#00796b');
+ if(!MED.oblig)h+=b('Foto de apoyo (vista general): guardar sin medir','medCerrar({apoyo:true})','#607d8b');return h;}
 function medReglaOk(){if(MED.regla.length<2){alert('Toque los dos extremos de la regla (quedan '+(2-MED.regla.length)+'). Si no puso regla, use "No puse regla".');return;}
  const g=p=>sueloXY(p[0],p[1],MED.W,MED.H,MED.tilt,MED.alt);const a=g(MED.regla[0]),b=g(MED.regla[1]);const L=a&&b?Math.hypot(a[0]-b[0],a[1]-b[1]):null;
  if(L==null||L<0.3||L>3){alert('Esos dos puntos no parecen ser una regla de 1 m (la geometría da '+(L==null?'fuera del horizonte':L.toFixed(2)+' m')+'). Revise la inclinación/altura o vuelva a tocar los extremos.');return;}
@@ -571,7 +586,9 @@ function medCalcular(){const g=p=>sueloXY(p[0],p[1],MED.W,MED.H,MED.tilt,MED.alt
  else if(!MED.lineal&&P.length==4){const A=areaPoligono(P)*fac*fac;const d=(i,j)=>Math.hypot(P[i][0]-P[j][0],P[i][1]-P[j][1])*fac;const largo=Math.max(d(0,1),d(2,3)),ancho=Math.max(d(1,2),d(3,0));MED.res={area_m2:+A.toFixed(2),largo_m:+Math.max(largo,ancho).toFixed(2),ancho_m:+Math.min(largo,ancho).toFixed(2),factor_regla:fac,metodo:'geometría'+(fac!=1?' + regla':'')};$('medres').textContent=`Área ≈ ${A.toFixed(2)} m² (${Math.max(largo,ancho).toFixed(2)} × ${Math.min(largo,ancho).toFixed(2)} m)${txtR}`;}
  else{MED.res=null;$('medres').textContent=MED.pts.length?`${MED.pts.length} de ${MED.lineal?2:4} puntos…`:'';}}
 function medListo(){if(!MED.res){alert(MED.lineal?'Toque los dos extremos de la grieta.':'Toque las 4 esquinas del daño ('+MED.pts.length+' de 4).');return;}MED.res.sin_regla=MED.sinRegla;MED.res.regla_px=MED.regla.map(p=>[Math.round(p[0]),Math.round(p[1])]);MED.res.puntos_px=MED.pts.map(p=>[Math.round(p[0]),Math.round(p[1])]);medCerrar(MED.res);}
-function medCerrar(res,repetir){$('medbox').style.display='none';if(repetir){CAM.fotos.pop();if($('cammsg'))$('cammsg').textContent='Foto descartada. Encuadre de nuevo con la regla de 1 m en el piso y vuelva a capturar.';if(MED.cb)MED.cb(false);return;}if(res){if(res.area_m2!=null){if($('clargo'))$('clargo').value=res.largo_m;if($('cancho'))$('cancho').value=res.ancho_m;}if(res.longitud_m!=null&&$('cml'))$('cml').value=res.longitud_m;if($('cmsg')){$('cmsg').style.color='#2e7d32';$('cmsg').textContent='Medida tomada de la foto ('+res.metodo+'): '+(res.area_m2!=null?res.area_m2+' m²':res.longitud_m+' m')+'. Puede corregirla a mano.';}}if(MED.cb)MED.cb(res);}
+function medCerrar(res,repetir){$('medbox').style.display='none';if(repetir){CAM.fotos.pop();if($('cammsg'))$('cammsg').textContent='Foto descartada. Encuadre de nuevo con la regla de 1 m en el piso y vuelva a capturar.';if(MED.cb)MED.cb(false);return;}if(res&&(res.apoyo||res.sin_medida)){if(MED.cb)MED.cb(res);return;}
+ if(res&&(MED.tipo=='obra'||MED.tipo=='atencion')){const q=MED.tipo=='obra'?$('ccant'):$('cacant');const v=res.area_m2!=null?res.area_m2:res.longitud_m;if(q&&v!=null&&!q.value)q.value=v;}
+ if(res&&MED.tipo=='dano'){if(res.area_m2!=null){if($('clargo'))$('clargo').value=res.largo_m;if($('cancho'))$('cancho').value=res.ancho_m;}if(res.longitud_m!=null&&$('cml'))$('cml').value=res.longitud_m;if($('cmsg')){$('cmsg').style.color='#2e7d32';$('cmsg').textContent='Medida tomada de la foto ('+res.metodo+'): '+(res.area_m2!=null?res.area_m2+' m²':res.longitud_m+' m')+'. Puede corregirla a mano.';}}if(MED.cb)MED.cb(res);}
 
 
 // ================= TAREAS PROGRAMADAS (programacion_inspecciones.py → campo\Tareas.csv → Campo_version.json) =================
@@ -630,7 +647,7 @@ function verificarRep(t){let v=$('verbox');if(!v){v=document.createElement('div'
   <div style="margin-top:6px"><input id="verobs" placeholder="observación" style="width:100%"></div>
   <div style="display:flex;gap:6px;margin-top:10px"><button type="button" onclick="verFotoTomar()" style="flex:1;padding:9px;border:0;border-radius:8px;background:#1E88E5;color:#fff">📷 Tomar foto de hoy</button><button type="button" id="verok" onclick="verGuardar('${t.id}')" style="flex:1;padding:9px;border:0;border-radius:8px;background:#2e7d32;color:#fff;font-weight:bold">✓ Guardar</button><button type="button" onclick="$('verbox').style.display='none'" style="padding:9px;border:0;border-radius:8px;background:#777;color:#fff">✕</button></div>
   <div style="font-size:10px;color:#666;margin-top:6px">Tome la foto desde el mismo punto y ángulo que la de antes. Si marca "reabrió", el sistema crea el daño nuevo enlazado al punto de falla y la reparación cuenta como reabierta para el contratista.</div></div>`;v.style.display='flex';v._t=t;v._foto=null;}
-function verFotoTomar(){camAbrir('foto',d=>{const v=$('verbox');v._foto=d;$('verdes').innerHTML=`<img src="${d}" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`;camCerrar();});}
+function verFotoTomar(){camAbrir('foto',d=>{const v=$('verbox');v._foto=d;$('verdes').innerHTML=`<img src="${d}" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`;camCerrar();},{tipo:'verificacion',n:0});}
 function verGuardar(id){const v=$('verbox');const t=v._t;if(id=='DEMO'){alert('Era un ejemplo: en una tarea real aquí se guarda la verificación (estado + foto de hoy) y, si marcó "reabrió", se crea el daño nuevo dentro del parche.');v.style.display='none';return;}const est=$('verest').value;const obs=$('verobs').value;if(!v._foto&&!confirm('No tomó la foto de hoy. ¿Guardar sin foto?'))return;
  const f=FICHA[t.cod]||{};const hoy=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);const usr=localStorage.getItem('pms_usuario')||'';const base={codigo:t.cod,trayecto:f.t||t.t,calzada:f.cz||t.cz,carril:f.car||t.ca,usuario:usr,fecha:hoy,registrado:new Date().toISOString(),lat:ultimaPos?ultimaPos[0]:null,lon:ultimaPos?ultimaPos[1]:null,gps_prec:gpsPrec,contratista:localStorage.getItem('pms_contratista')||'',contrato:localStorage.getItem('pms_contrato')||''};
  const r=registros();
