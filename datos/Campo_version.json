@@ -1,0 +1,25 @@
+{
+"generado": "2026-10-23 11:32",
+"secciones": 4788,
+"fotos": 204,
+"escenarios": [
+"Base BC"
+],
+"huella": "442c006777",
+"fichas_partes": [
+"Campo_fichas_1.json",
+"Campo_fichas_2.json",
+"Campo_fichas_3.json",
+"Campo_fichas_4.json",
+"Campo_fichas_5.json"
+],
+"fichas_partes_gz": [
+"Campo_fichas_1.json.gz",
+"Campo_fichas_2.json.gz",
+"Campo_fichas_3.json.gz",
+"Campo_fichas_4.json.gz",
+"Campo_fichas_5.json.gz"
+],
+"plan_gz": "Campo_plan.json.gz",
+"extra_gz": "Campo_extra.json.gz"
+}
