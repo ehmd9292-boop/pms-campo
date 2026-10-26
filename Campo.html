@@ -1889,6 +1889,8 @@ function vvElem(dec){const x=vvItems('e')[VV.lista[VV.i]];const b=document.query
 function vvCat(){if(VV.cat)return Promise.resolve(VV.cat);return fetch('datos/video/senales.json',{cache:'no-cache'}).then(r=>r.json()).then(c=>{VV.cat=c||[];return VV.cat;}).catch(()=>{VV.cat=[];return [];});}
 function vvNorm(t){return String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
 function vvNomCod(c){const k=(VV.cat||[]).find(z=>z[0]===c);return k?k[1]:'';}
+// v199 (pedido de Erix, 26-oct-2026): la figura de la señal del Manual, para identificarla más fácil
+function vvFig(c,h){return c?`<img src="datos/video/fig/${String(c).toUpperCase().replace(/[^A-Z0-9_-]/g,'_')}.png" alt="" style="height:${h}px;max-width:${Math.round(h*1.6)}px;object-fit:contain;vertical-align:middle" onerror="this.style.display='none'">`:'';}
 function vvSugCod(x){const C=VV.cat||[];const out=[],ya=new Set();const add=(c,why)=>{if(!c||ya.has(c))return;ya.add(c);out.push([c,vvNomCod(c),why]);};
  (x.sg||[]).forEach(g=>{if(g[0]==='tipo')add(g[1],`usted lo ha corregido así ${g[2]} de ${g[3]} veces`);});
  if(x.ci)add(x.ci,'lo que leyó la IA');
@@ -1899,12 +1901,13 @@ function vvSugCod(x){const C=VV.cat||[];const out=[],ya=new Set();const add=(c,w
 function vvOptsCod(lista,sel){const L=lista.slice();if(sel&&!L.some(z=>z[0]===sel))L.unshift([sel,vvNomCod(sel)]);return L.map(z=>`<option value="${z[0]}"${z[0]===sel?' selected':''}>${z[0]} · ${z[1]||''}</option>`).join('');}
 function vvCodHtml(x,e){const sel=(e&&e.ci)||x.ci||'';const sug=vvSugCod(x);const des=(x.sg||[]).find(g=>g[0]==='descarte');
  return `<h4>Código INVIAS de la señal</h4>${des?`<div style="background:#fff3e0;border-radius:6px;padding:4px 7px;font-size:12px;margin-bottom:4px">📚 Esta señal fue error de la IA en ${des[2]} de ${des[3]} casos: mírela con cuidado.</div>`:''}
- ${sug.length?`<div style="font-size:12px;color:#455a64">Sugeridos (toque uno):</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin:3px 0">${sug.map(z=>`<button type="button" onclick="vvPonCod('${z[0]}')" title="${z[2]}" style="min-height:34px;border-radius:6px;border:1px solid ${z[0]===sel?'#004A61':'#999'};background:${z[0]===sel?'#e3f2fd':'#fff'};font-size:13px;text-align:left;padding:2px 6px"><b>${z[0]}</b> ${String(z[1]).slice(0,34)}<br><span style="color:#777;font-size:11px">${z[2]}</span></button>`).join('')}</div>`:''}
+ ${sug.length?`<div style="font-size:12px;color:#455a64">Sugeridos (toque uno):</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin:3px 0">${sug.map(z=>`<button type="button" onclick="vvPonCod('${z[0]}')" title="${z[2]}" style="min-height:34px;border-radius:6px;border:1px solid ${z[0]===sel?'#004A61':'#999'};background:${z[0]===sel?'#e3f2fd':'#fff'};font-size:13px;text-align:left;padding:3px 6px;display:flex;gap:6px;align-items:center;max-width:100%">${vvFig(z[0],46)}<span><b>${z[0]}</b> ${String(z[1]).slice(0,34)}<br><span style="color:#777;font-size:11px">${z[2]}</span></span></button>`).join('')}</div>`:''}
  <input id="vvbus" placeholder="Buscar por código o nombre (ej. SR-30, curva, velocidad)" oninput="vvBuscaCod()" style="width:100%;box-sizing:border-box;min-height:34px;font-size:14px;margin:2px 0">
  <select id="vvci" onchange="vvCodElegido()">${vvOptsCod((VV.cat||[]).slice(0,400),sel)}</select>
- <div id="vvcin" style="font-size:12px;color:#455a64;margin-top:2px">${sel?'Escogido: <b>'+sel+'</b> '+vvNomCod(sel):'Escoja el código de la señal.'}</div>`;}
+ <div id="vvcin" style="font-size:12px;color:#455a64;margin-top:4px">${vvCinHtml(sel)}</div>`;}
+function vvCinHtml(c){return c?`<div style="display:flex;gap:8px;align-items:center;background:#f5f7f8;border-radius:8px;padding:4px">${vvFig(c,90)}<span>Escogido: <b>${c}</b><br>${vvNomCod(c)}<br><span style="color:#777;font-size:11px">Compárela con la foto</span></span></div>`:'Escoja el código de la señal.';}
 function vvPonCod(c){const s=$('vvci');if(!s)return;if(![...s.options].some(o=>o.value===c))s.insertAdjacentHTML('afterbegin',`<option value="${c}">${c} · ${vvNomCod(c)}</option>`);s.value=c;vvCodElegido();}
-function vvCodElegido(){const c=($('vvci')||{}).value||'';if($('vvcin'))$('vvcin').innerHTML='Escogido: <b>'+c+'</b> '+vvNomCod(c);}
+function vvCodElegido(){const c=($('vvci')||{}).value||'';if($('vvcin'))$('vvcin').innerHTML=vvCinHtml(c);}
 function vvBuscaCod(){const q=vvNorm(($('vvbus')||{}).value).trim();const sel=($('vvci')||{}).value;const C=VV.cat||[];
  const L=q?C.filter(z=>vvNorm(z[0]).includes(q)||q.split(/\s+/).every(w=>vvNorm(z[1]).includes(w))).slice(0,80):C.slice(0,400);
  $('vvci').innerHTML=vvOptsCod(L,sel);}
