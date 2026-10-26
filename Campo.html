@@ -1691,7 +1691,7 @@ function acomodarBarras(){try{const P=document.querySelector('.panel'),G=documen
 //  Cada validación viaja como registro «validacion_video» y en el PC la aplica validacion_video_campo.py (lo validado en el PC manda).
 // ======================================================================================================================================
 const VVK='pms_valvid';
-let VV={idx:null,vid:null,d:null,tab:'d',filtro:'pend',lista:[],i:0,zoom:1,modo:'mover',marcas:[],dib:null,sitio:null,tipoSel:'',sevSel:'M',nueva:null};
+let VV={idx:null,vid:null,d:null,tab:'d',filtro:'pend',lista:[],i:0,zoom:1,modo:'mover',marcas:[],dib:null,sitio:null,tipoSel:'',sevSel:'M',nueva:null,formaSel:'contorno',cat:null};
 const VV_LIN=['3','6','7','8','12'];
 const vvLineal=t=>VV_LIN.includes(String(t||'').split('.')[0].trim());
 function vvEstado(){try{return JSON.parse(localStorage.getItem(VVK)||'{}');}catch(e){return {};}}
@@ -1742,7 +1742,7 @@ function vvListaVideos(){const E=vvEstado();
   ${v.nc?`🖼 ${v.nc} cuadros (${v.pc} por revisar) · `:''}${v.nd?`⚠️ ${v.nd} daños (${v.pd} por validar) · `:''}${v.ne?`🚸 ${v.ne} elementos (${v.pe} por validar)`:''}${hechos?` · <b style="color:#2e7d32">${hechos} hechos en esta tablet</b>`:''}</span></div>`;});
  $('vvbox').innerHTML=h+'</div>';}
 function vvVideo(id){VV.vid=id;$('vvbox').innerHTML='<div style="padding:30px;font-size:16px">Cargando el video…</div>';
- fetch('datos/video/'+id+'/v.json',{cache:'no-cache'}).then(r=>r.json()).then(d=>{VV.d=d;VV.tab=d.cuadros.length?'c':(d.danos.length?'d':'e');VV.filtro='pend';vvLista();vvMostrar(0);})
+ Promise.all([fetch('datos/video/'+id+'/v.json',{cache:'no-cache'}).then(r=>r.json()),vvCat()]).then(([d])=>{VV.d=d;VV.tab=d.cuadros.length?'c':(d.danos.length?'d':'e');VV.filtro='pend';vvLista();vvMostrar(0);})
   .catch(e=>{alert('No se pudo cargar el video (¿sin señal?). Ábralo una vez con señal para que quede guardado.');vvListaVideos();});}
 function vvItems(tab){const d=VV.d;return tab==='c'?d.cuadros:(tab==='d'?d.danos:d.elementos);}
 function vvPunto(x){if(x.lat!=null&&x.lon!=null)return [x.lat,x.lon];const f=FICHA[x.cod],q=COORDS[x.cod];if(!f||!q)return null;
@@ -1799,20 +1799,23 @@ function vvPanel(x,e){const hecho=e?`<div style="background:#e8f5e9;border-radiu
   <textarea id="vvnota" rows="2" placeholder="Nota (opcional)">${(e&&e.nota)||''}</textarea>${vvSitioHtml(x)}`;}
  if(VV.tab==='d'){const t=(e&&e.tipo)||x.tv||x.t,s=(e&&e.sev)||x.sv||x.s||'M';
   return `<div style="font-size:16px;font-weight:bold">${x.t} · ${x.s||''}</div><div style="color:#666;font-size:12px">PR ${x.pr!=null?prTxt(x.pr):'?'} · ${x.cod||''} · confianza ${Math.round((x.conf||0)*100)} %</div>${hecho}
-  <h4>Tipo de daño (VIZIR)</h4><select id="vvtipo">${vvOpts(t)}</select><h4>Severidad</h4>${vvSevBtns('vvsev',s)}
-  <div style="font-size:12px;color:#455a64;margin:4px 0">Si el recuadro rojo no encierra bien el daño, toque ✏️ Dibujar y vuelva a marcarlo (${vvLineal(t)?'trazo sobre la fisura':'recuadro'}).</div>
+  <h4>Tipo de daño (VIZIR)</h4><select id="vvtipo" onchange="vvAvisoForma()">${vvOpts(t)}</select><h4>Severidad</h4>${vvSevBtns('vvsev',s)}
+  <div style="font-size:12px;color:#455a64;margin:4px 0">Si el recuadro rojo no encierra bien el daño, toque ✏️ Dibujar y vuelva a marcarlo.</div><div id="vvforma" style="font-size:12px;color:#455a64;margin-top:3px">${vvFormaTxt(t)}</div>
   <button class="bt ok" onclick="vvDano('correcto')">✅ Correcto</button><button class="bt no" onclick="vvDano('no_es')">🗑 No es daño</button>
   <textarea id="vvnota" rows="2" placeholder="Nota (opcional)">${(e&&e.nota)||''}</textarea>${vvSitioHtml(x)}`;}
  const est=(e&&e.estado)||x.est||'bueno';
  return `<div style="font-size:16px;font-weight:bold">${x.g==='S'?'🚸 ':''}${x.ci?x.ci+' · ':''}${x.n||x.tp}</div><div style="color:#666;font-size:12px">PR ${x.prt||(x.pr!=null?prTxt(x.pr):'?')} · ${x.cos||''} · ${x.cod||''}${x.ver==='no confirmada'?' · <b style="color:#e65100">la IA no la confirmó de cerca</b>':''}</div>${hecho}
-  <h4>Estado</h4><div class="sev" id="vvest">${['bueno','regular','malo'].map(s=>`<button type="button" class="${s===est?'on':''}" onclick="document.querySelectorAll('#vvest button').forEach(b=>b.classList.toggle('on',b===this))">${s}</button>`).join('')}</div>
+  ${x.g==='S'?vvCodHtml(x,e):''}<h4>Estado</h4><div class="sev" id="vvest">${['bueno','regular','malo'].map(s=>`<button type="button" class="${s===est?'on':''}" onclick="document.querySelectorAll('#vvest button').forEach(b=>b.classList.toggle('on',b===this))">${s}</button>`).join('')}</div>
   <button class="bt ok" onclick="vvElem('correcto')">✅ Correcto: existe y es esto</button><button class="bt no" onclick="vvElem('error_ia')">🗑 Error de la IA (ahí no hay nada)</button>
   <button class="bt no" onclick="vvElem('no_activo')">🚫 Existe pero no es un activo de la vía</button>
   <textarea id="vvnota" rows="2" placeholder="Nota (opcional): código distinto, daño de la señal…">${(e&&e.nota)||''}</textarea>${vvSitioHtml(x)}`;}
-function vvFormaTxt(){return vvLineal(VV.tipoSel)?'✏️ Este daño se mide en metros lineales: con ✏️ Dibujar, pase el dedo por encima de la fisura (trazo).':'✏️ Este daño se mide en m²: con ✏️ Dibujar, arrastre el dedo para encerrarlo en un recuadro.';}
-function vvAvisoForma(){if($('vvforma'))$('vvforma').textContent=vvFormaTxt();}
+function vvFormaTxt(t){t=t||VV.tipoSel;if(vvLineal(t))return '✏️ Este daño se mide en metros lineales: con ✏️ Dibujar, pase el dedo por encima de la fisura (trazo).';
+ // v197 (pedido de Erix, 26-oct-2026): como en el PC, el daño de m² se puede marcar con su contorno (forma libre) o con un recuadro
+ return `<div class="sev" style="margin:2px 0">${[['contorno','⬠ Contorno'],['recuadro','▭ Recuadro']].map(([f,n])=>`<button type="button" class="${VV.formaSel===f?'on':''}" onclick="VV.formaSel='${f}';vvAvisoForma()">${n}</button>`).join('')}</div>`+
+  (VV.formaSel==='contorno'?'✏️ Este daño se mide en m²: con ✏️ Dibujar, pase el dedo por todo el borde del daño (contorno); al soltar se cierra solo.':'✏️ Este daño se mide en m²: con ✏️ Dibujar, arrastre el dedo para encerrarlo en un recuadro.');}
+function vvAvisoForma(){if($('vvforma'))$('vvforma').innerHTML=vvFormaTxt(VV.tab==='d'&&$('vvtipo')?$('vvtipo').value:VV.tipoSel);}
 function vvMarcasHtml(){if(!VV.marcas.length)return '<div style="color:#666;font-size:13px">Ninguno todavía. Use ✏️ Dibujar o «✔ Es daño» en lo que vio el modelo.</div>';
- return VV.marcas.map((m,i)=>`<div class="marca"><b>${i+1}</b> ${m.f==='trazo'?'✏️ trazo':'▭ recuadro'}<select onchange="VV.marcas[${i}].t=this.value;vvDibujar()">${vvOpts(m.t)}</select>
+ return VV.marcas.map((m,i)=>`<div class="marca"><b>${i+1}</b> ${m.f==='trazo'?'✏️ trazo':(m.f==='contorno'?'⬠ contorno':'▭ recuadro')}<select onchange="VV.marcas[${i}].t=this.value;vvDibujar()">${vvOpts(m.t)}</select>
  <div style="display:flex;gap:4px;margin-top:3px">${vvSevBtns('vvsm'+i,m.s)}<button type="button" onclick="VV.marcas.splice(${i},1);vvRefrescarMarcas()" style="min-width:40px">✕</button></div></div>`).join('');}
 function vvRefrescarMarcas(){if($('vvmarcas'))$('vvmarcas').innerHTML=vvMarcasHtml();if($('vvnm'))$('vvnm').textContent='Daños de este cuadro ('+VV.marcas.length+')';const b=document.querySelector('#vvlado .bt.ok');if(b&&VV.tab==='c')b.textContent=`✅ Cuadro completo (${VV.marcas.length} daño(s))`;vvDibujar();}
 function vvUsarSug(i){const x=vvItems('c')[VV.lista[VV.i]];const s=x.s[i];VV.marcas.push({t:s[0],s:'M',b:s.slice(2,6),f:'recuadro',p:[]});vvRefrescarMarcas();}
@@ -1842,8 +1845,9 @@ function vvEventos(){const c=$('vvcan');vvModo(VV.modo);vvPellizco();let pts=nul
  const fin=ev=>{if(!pts)return;const P=pts;pts=null;VV.dib=null;if(P.length<2){vvDibujar();return;}
   const xs=P.map(p=>p[0]),ys=P.map(p=>p[1]);const b=[Math.min(...xs),Math.min(...ys),Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)].map(v=>+v.toFixed(4));
   if(b[2]<0.005&&b[3]<0.005){vvDibujar();return;}
-  if(VV.tab==='c'){const lin=vvLineal(VV.tipoSel);VV.marcas.push(lin?{t:VV.tipoSel,s:VV.sevSel,b:b,f:'trazo',p:vvSimpl(P)}:{t:VV.tipoSel,s:VV.sevSel,b:b,f:'recuadro',p:[]});vvRefrescarMarcas();}
-  else if(VV.tab==='d'){const lin=vvLineal($('vvtipo').value);VV.nueva=lin?{b:b,f:'trazo',p:vvSimpl(P)}:{b:b,f:'recuadro',p:[]};vvDibujar();}
+  const cont=VV.formaSel==='contorno'&&P.length>=3;
+  if(VV.tab==='c'){const lin=vvLineal(VV.tipoSel);VV.marcas.push(lin?{t:VV.tipoSel,s:VV.sevSel,b:b,f:'trazo',p:vvSimpl(P)}:(cont?{t:VV.tipoSel,s:VV.sevSel,b:b,f:'contorno',p:vvSimpl(P)}:{t:VV.tipoSel,s:VV.sevSel,b:b,f:'recuadro',p:[]}));vvRefrescarMarcas();}
+  else if(VV.tab==='d'){const lin=vvLineal($('vvtipo').value);VV.nueva=lin?{b:b,f:'trazo',p:vvSimpl(P)}:(cont?{b:b,f:'contorno',p:vvSimpl(P)}:{b:b,f:'recuadro',p:[]});vvDibujar();}
   else vvDibujar();};
  c.addEventListener('pointerup',fin);c.addEventListener('pointercancel',fin);window.addEventListener('resize',vvDibujar);}
 function vvSimpl(P){const o=[P[0]];for(let i=1;i<P.length;i++){const u=o[o.length-1];if(Math.hypot(P[i][0]-u[0],P[i][1]-u[1])>0.012||i===P.length-1)o.push(P[i]);}return o.map(p=>[+p[0].toFixed(4),+p[1].toFixed(4)]);}
@@ -1851,13 +1855,15 @@ function vvDibujar(){const c=$('vvcan'),im=$('vvimg');if(!c||!im||!im.complete)r
  const it=vvItems(VV.tab),x=it[VV.lista[VV.i]];if(!x)return;const lw=Math.max(2,W/500);
  const caja=(b,col,dash)=>{if(!b||b.length<4)return;g.setLineDash(dash?[8,6]:[]);g.lineWidth=lw+2;g.strokeStyle='rgba(0,0,0,.6)';g.strokeRect(b[0]*W,b[1]*H,b[2]*W,b[3]*H);g.lineWidth=lw;g.strokeStyle=col;g.strokeRect(b[0]*W,b[1]*H,b[2]*W,b[3]*H);g.setLineDash([]);};
  const linea=(p,col)=>{if(!p||p.length<2)return;g.lineCap='round';g.lineJoin='round';[['rgba(0,0,0,.6)',lw+3],[col,lw+1]].forEach(([c_,w])=>{g.strokeStyle=c_;g.lineWidth=w;g.beginPath();p.forEach((q,i)=>i?g.lineTo(q[0]*W,q[1]*H):g.moveTo(q[0]*W,q[1]*H));g.stroke();});};
+ const poli=(p,col)=>{if(!p||p.length<3)return;g.lineJoin='round';g.beginPath();p.forEach((q,i)=>i?g.lineTo(q[0]*W,q[1]*H):g.moveTo(q[0]*W,q[1]*H));g.closePath();g.fillStyle=col+'33';g.fill();
+  [['rgba(0,0,0,.6)',lw+3],[col,lw+1]].forEach(([c_,w])=>{g.strokeStyle=c_;g.lineWidth=w;g.stroke();});};
  const rot=(txt,b,col)=>{g.font=`bold ${Math.max(12,W/70)}px sans-serif`;const w=g.measureText(txt).width+8;g.fillStyle=col;g.fillRect(b[0]*W,Math.max(0,b[1]*H-Math.max(16,W/55)),w,Math.max(16,W/55));g.fillStyle='#fff';g.fillText(txt,b[0]*W+4,Math.max(12,b[1]*H-4));};
- if(VV.tab==='c'){(x.s||[]).forEach(s=>caja(s.slice(2,6),'#ffd600',true));VV.marcas.forEach((m,i)=>{if(m.f==='trazo')linea(m.p,'#004A61');else caja(m.b,'#004A61');rot(String(i+1)+' '+String(m.t).split('.')[0]+m.s,m.b,'#004A61');});}
- else if(VV.tab==='d'){if(VV.nueva){if(VV.nueva.f==='trazo')linea(VV.nueva.p,'#00c853');else caja(VV.nueva.b,'#00c853');caja(x.b,'rgba(229,57,53,.6)',true);}
-  else if(x.fo==='trazo'&&x.pts&&x.pts.length)linea(x.pts,'#e53935');else caja(x.b,'#e53935');}
+ if(VV.tab==='c'){(x.s||[]).forEach(s=>caja(s.slice(2,6),'#ffd600',true));VV.marcas.forEach((m,i)=>{if(m.f==='trazo')linea(m.p,'#004A61');else if(m.f==='contorno')poli(m.p,'#004A61');else caja(m.b,'#004A61');rot(String(i+1)+' '+String(m.t).split('.')[0]+m.s,m.b,'#004A61');});}
+ else if(VV.tab==='d'){if(VV.nueva){if(VV.nueva.f==='trazo')linea(VV.nueva.p,'#00c853');else if(VV.nueva.f==='contorno')poli(VV.nueva.p,'#00c853');else caja(VV.nueva.b,'#00c853');caja(x.b,'rgba(229,57,53,.6)',true);}
+  else if(x.fo==='trazo'&&x.pts&&x.pts.length)linea(x.pts,'#e53935');else if(x.fo==='contorno'&&x.pts&&x.pts.length>2)poli(x.pts,'#e53935');else caja(x.b,'#e53935');}
  else caja(x.b,'#ffd600');
  if(VV.dib&&VV.dib.length>1){const lin=VV.tab==='c'?vvLineal(VV.tipoSel):(VV.tab==='d'?vvLineal(($('vvtipo')||{}).value):false);
-  if(lin)linea(VV.dib,'#00e5ff');else{const xs=VV.dib.map(p=>p[0]),ys=VV.dib.map(p=>p[1]);caja([Math.min(...xs),Math.min(...ys),Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)],'#00e5ff');}}}
+  if(lin||VV.formaSel==='contorno')linea(VV.dib,'#00e5ff');else{const xs=VV.dib.map(p=>p[0]),ys=VV.dib.map(p=>p[1]);caja([Math.min(...xs),Math.min(...ys),Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)],'#00e5ff');}}}
 function vvRegistro(x,det,txt){const nota=($('vvnota')||{}).value||'';const hoy=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
  const f=FICHA[x.cod]||{};const s=VV.sitio;const sitioTxt=s?(s.en_sitio?' · verificado en el sitio ('+s.dist+' m)':(s.dist!=null?' · a '+s.dist+' m del sitio':'')):'';
  det=Object.assign({video:VV.d.video,nota:nota,sitio:s||null},det);
@@ -1866,7 +1872,7 @@ function vvRegistro(x,det,txt){const nota=($('vvnota')||{}).value||'';const hoy=
   actividad:'',observacion:'[validación del video en campo] '+txt+sitioTxt+(nota?' · '+nota:''),registrado:new Date().toISOString(),
   lat:(s&&s.en_sitio)?s.lat:null,lon:(s&&s.en_sitio)?s.lon:null,gps_prec:(s&&s.en_sitio)?s.prec:null,fotos:[],fotos_meta:[],dren:det};
  const R=registros();R.push(rec);setRegistros(R);nReg();
- const E=vvEstado();E[vvClave(VV.tab,VV.tab==='c'?x.c:x.id)]=Object.assign({txt:txt,nota:nota,t:Date.now(),sitio:!!(s&&s.en_sitio)},det.marcas?{marcas:det.marcas}:{},det.tipo?{tipo:det.tipo,sev:det.sev}:{},det.estado?{estado:det.estado}:{});vvGuardarEstado(E);
+ const E=vvEstado();E[vvClave(VV.tab,VV.tab==='c'?x.c:x.id)]=Object.assign({txt:txt,nota:nota,t:Date.now(),sitio:!!(s&&s.en_sitio)},det.marcas?{marcas:det.marcas}:{},det.tipo?{tipo:det.tipo,sev:det.sev}:{},det.estado?{estado:det.estado}:{},det.ci?{ci:det.ci}:{});vvGuardarEstado(E);
  const sig=VV.i+(VV.filtro==='pend'?0:1);vvLista();if(VV.lista.length)vvMostrar(Math.min(sig,VV.lista.length-1));else vvMostrar(0);}
 function vvCuadro(dec){const x=vvItems('c')[VV.lista[VV.i]];if(dec==='completo'&&!VV.marcas.length&&!confirm('No marcó ningún daño. ¿El cuadro no tiene daños?'))return;
  const marcas=dec==='completo'?VV.marcas.map(m=>({t:m.t,s:m.s,b:m.b,f:m.f,p:m.p})):[];
@@ -1876,7 +1882,32 @@ function vvDano(dec){const x=vvItems('d')[VV.lista[VV.i]];const t=$('vvtipo').va
  const igual=t===x.t&&s===(x.s||'M')&&!VV.nueva;const d={modo:'dano',id:x.id,decision:igual?'correcto':'corregido',tipo:t,sev:s};if(VV.nueva){d.b=VV.nueva.b;d.f=VV.nueva.f;d.p=VV.nueva.p;}
  vvRegistro(x,d,(igual?'daño correcto: ':'daño corregido: ')+t+' '+s);}
 function vvElem(dec){const x=vvItems('e')[VV.lista[VV.i]];const b=document.querySelector('#vvest button.on');const est=b?b.textContent:'';
- vvRegistro(x,{modo:'elemento',id:x.id,decision:dec,estado:est},{correcto:'elemento correcto ('+est+')',error_ia:'error de la IA',no_activo:'no es activo vial'}[dec]+': '+(x.ci?x.ci+' ':'')+(x.n||x.tp));}
+ const ci=x.g==='S'&&$('vvci')?$('vvci').value:'';const d={modo:'elemento',id:x.id,decision:dec,estado:est};if(ci)d.ci=ci;
+ vvRegistro(x,d,{correcto:'elemento correcto ('+est+')',error_ia:'error de la IA',no_activo:'no es activo vial'}[dec]+': '+(ci&&ci!==x.ci?(x.ci||'?')+' → '+ci+' ':(x.ci?x.ci+' ':''))+(x.n||x.tp));}
+// v197 (pedido de Erix, 26-oct-2026): como en el PC, al revisar una señal se sugiere su código INVIAS: lo que usted ya corrigió antes en ese
+// mismo caso, lo que leyó la IA y los códigos cuyo nombre se parece al de la señal. Se busca por código o por nombre.
+function vvCat(){if(VV.cat)return Promise.resolve(VV.cat);return fetch('datos/video/senales.json',{cache:'no-cache'}).then(r=>r.json()).then(c=>{VV.cat=c||[];return VV.cat;}).catch(()=>{VV.cat=[];return [];});}
+function vvNorm(t){return String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
+function vvNomCod(c){const k=(VV.cat||[]).find(z=>z[0]===c);return k?k[1]:'';}
+function vvSugCod(x){const C=VV.cat||[];const out=[],ya=new Set();const add=(c,why)=>{if(!c||ya.has(c))return;ya.add(c);out.push([c,vvNomCod(c),why]);};
+ (x.sg||[]).forEach(g=>{if(g[0]==='tipo')add(g[1],`usted lo ha corregido así ${g[2]} de ${g[3]} veces`);});
+ if(x.ci)add(x.ci,'lo que leyó la IA');
+ const pal=vvNorm(x.n||x.tp).split(/[^a-z0-9ñ]+/).filter(w=>w.length>3);
+ if(pal.length)C.map(z=>[z,pal.filter(w=>vvNorm(z[1]).includes(w)).length]).filter(q=>q[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,4).forEach(q=>add(q[0][0],'su nombre se parece'));
+ const fam=String(x.ci||'').split('-')[0];if(fam&&out.length<6)C.filter(z=>z[0].startsWith(fam+'-')).slice(0,6-out.length).forEach(z=>add(z[0],'misma familia'));
+ return out.slice(0,6);}
+function vvOptsCod(lista,sel){const L=lista.slice();if(sel&&!L.some(z=>z[0]===sel))L.unshift([sel,vvNomCod(sel)]);return L.map(z=>`<option value="${z[0]}"${z[0]===sel?' selected':''}>${z[0]} · ${z[1]||''}</option>`).join('');}
+function vvCodHtml(x,e){const sel=(e&&e.ci)||x.ci||'';const sug=vvSugCod(x);const des=(x.sg||[]).find(g=>g[0]==='descarte');
+ return `<h4>Código INVIAS de la señal</h4>${des?`<div style="background:#fff3e0;border-radius:6px;padding:4px 7px;font-size:12px;margin-bottom:4px">📚 Esta señal fue error de la IA en ${des[2]} de ${des[3]} casos: mírela con cuidado.</div>`:''}
+ ${sug.length?`<div style="font-size:12px;color:#455a64">Sugeridos (toque uno):</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin:3px 0">${sug.map(z=>`<button type="button" onclick="vvPonCod('${z[0]}')" title="${z[2]}" style="min-height:34px;border-radius:6px;border:1px solid ${z[0]===sel?'#004A61':'#999'};background:${z[0]===sel?'#e3f2fd':'#fff'};font-size:13px;text-align:left;padding:2px 6px"><b>${z[0]}</b> ${String(z[1]).slice(0,34)}<br><span style="color:#777;font-size:11px">${z[2]}</span></button>`).join('')}</div>`:''}
+ <input id="vvbus" placeholder="Buscar por código o nombre (ej. SR-30, curva, velocidad)" oninput="vvBuscaCod()" style="width:100%;box-sizing:border-box;min-height:34px;font-size:14px;margin:2px 0">
+ <select id="vvci" onchange="vvCodElegido()">${vvOptsCod((VV.cat||[]).slice(0,400),sel)}</select>
+ <div id="vvcin" style="font-size:12px;color:#455a64;margin-top:2px">${sel?'Escogido: <b>'+sel+'</b> '+vvNomCod(sel):'Escoja el código de la señal.'}</div>`;}
+function vvPonCod(c){const s=$('vvci');if(!s)return;if(![...s.options].some(o=>o.value===c))s.insertAdjacentHTML('afterbegin',`<option value="${c}">${c} · ${vvNomCod(c)}</option>`);s.value=c;vvCodElegido();}
+function vvCodElegido(){const c=($('vvci')||{}).value||'';if($('vvcin'))$('vvcin').innerHTML='Escogido: <b>'+c+'</b> '+vvNomCod(c);}
+function vvBuscaCod(){const q=vvNorm(($('vvbus')||{}).value).trim();const sel=($('vvci')||{}).value;const C=VV.cat||[];
+ const L=q?C.filter(z=>vvNorm(z[0]).includes(q)||q.split(/\s+/).every(w=>vvNorm(z[1]).includes(w))).slice(0,80):C.slice(0,400);
+ $('vvci').innerHTML=vvOptsCod(L,sel);}
 (function(){if(DATA!=='Campo')return;const f=document.querySelector('.gps .fila');if(f&&!$('bvid'))f.insertAdjacentHTML('beforeend',' <button id="bvid" onclick="vvAbrir()" title="validar en campo lo que el PC ya corrió del video: cuadro por cuadro, daños y elementos de la vía">🎥 Validar video</button>');})();
 
 // ======================================================================================================================================
