@@ -1709,6 +1709,7 @@ function vvCss(){if($('vvcss'))return;document.head.insertAdjacentHTML('beforeen
 #vvbox .herr{display:flex;gap:6px;padding:5px;background:#fff;border-bottom:1px solid #ccd;align-items:center;flex-wrap:wrap}
 #vvbox .herr button{min-height:34px;font-size:14px;border-radius:6px;border:1px solid #999;background:#fff;padding:2px 10px}
 #vvbox .herr button.on{background:#004A61;color:#fff;border-color:#004A61}
+#vvbox,#vvscroll{touch-action:pan-x pan-y}
 #vvscroll{flex:1;overflow:auto;position:relative;background:#222;-webkit-overflow-scrolling:touch}
 #vvlienzo{position:relative;transform-origin:0 0}
 #vvlienzo img{display:block;width:100%;user-select:none;-webkit-user-drag:none}
@@ -1726,11 +1727,11 @@ function vvCss(){if($('vvcss'))return;document.head.insertAdjacentHTML('beforeen
 #vvbox .sitio{background:#fff8e1;border-radius:8px;padding:6px 8px;margin:6px 0;font-size:13px}
 @media (orientation:portrait){#vvbox .cuerpo{flex-direction:column}#vvbox .lado{width:auto;max-width:none;border-left:0;border-top:1px solid #ccd;max-height:48vh}}
 </style>`);}
-function vvAbrir(){vvCss();if(!$('vvbox'))document.body.insertAdjacentHTML('beforeend','<div id="vvbox"></div>');$('vvbox').style.display='flex';
+function vvAbrir(){vvCss();vvVista(true);if(!$('vvbox'))document.body.insertAdjacentHTML('beforeend','<div id="vvbox"></div>');$('vvbox').style.display='flex';
  $('vvbox').innerHTML='<div style="padding:30px;font-size:16px">Cargando los videos que el PC ya corrió…</div>';
  fetch('datos/video/indice.json',{cache:'no-cache'}).then(r=>{if(!r.ok)throw new Error('sin índice');return r.json();}).then(j=>{VV.idx=j.videos||[];
   if(!VV.idx.length){$('vvbox').innerHTML=vvSinVideos();return;}vvListaVideos();}).catch(e=>{$('vvbox').innerHTML=vvSinVideos();});}
-function vvCerrar(){if($('vvbox'))$('vvbox').style.display='none';}
+function vvCerrar(){if($('vvbox'))$('vvbox').style.display='none';vvVista(false);}
 function vvSinVideos(){return `<div style="padding:24px;font-size:16px;line-height:1.5"><b>🎥 Validar video en campo</b><br>Todavía no hay videos listos para la tablet. Aparecen aquí cuando en el PC ya se corrió el video
  (Análisis de video / Revisión cuadro por cuadro) y se volvió a publicar la app.<br><br><button class="bt" style="max-width:260px" onclick="vvCerrar()">Volver al mapa</button></div>`;}
 function vvListaVideos(){const E=vvEstado();
@@ -1815,13 +1816,29 @@ function vvMarcasHtml(){if(!VV.marcas.length)return '<div style="color:#666;font
  <div style="display:flex;gap:4px;margin-top:3px">${vvSevBtns('vvsm'+i,m.s)}<button type="button" onclick="VV.marcas.splice(${i},1);vvRefrescarMarcas()" style="min-width:40px">✕</button></div></div>`).join('');}
 function vvRefrescarMarcas(){if($('vvmarcas'))$('vvmarcas').innerHTML=vvMarcasHtml();if($('vvnm'))$('vvnm').textContent='Daños de este cuadro ('+VV.marcas.length+')';const b=document.querySelector('#vvlado .bt.ok');if(b&&VV.tab==='c')b.textContent=`✅ Cuadro completo (${VV.marcas.length} daño(s))`;vvDibujar();}
 function vvUsarSug(i){const x=vvItems('c')[VV.lista[VV.i]];const s=x.s[i];VV.marcas.push({t:s[0],s:'M',b:s.slice(2,6),f:'recuadro',p:[]});vvRefrescarMarcas();}
-function vvZoom(d){const z=Math.max(1,Math.min(4,VV.zoom+d));const sc=$('vvscroll');const cx=sc?(sc.scrollLeft+sc.clientWidth/2)/VV.zoom:0,cy=sc?(sc.scrollTop+sc.clientHeight/2)/VV.zoom:0;
- VV.zoom=z;$('vvlienzo').style.width=(z*100)+'%';$('vvz').textContent=z+'×';setTimeout(()=>{vvDibujar();if(sc){sc.scrollLeft=cx*z-sc.clientWidth/2;sc.scrollTop=cy*z-sc.clientHeight/2;}},30);}
+function vvZoom(d){vvZoomA(Math.round(VV.zoom)+d);}
+// v197 (pedido de Erix desde la tablet, 26-oct-2026): al acercar con dos dedos se agrandaba TODA la pantalla y desaparecían la barra de
+// herramientas y el panel. Ahora el pellizco agranda solo el cuadro (como los botones − y +) y la barra queda siempre a la vista.
+function vvZoomA(z,px,py){z=Math.max(1,Math.min(4,Math.round(z*10)/10));const sc=$('vvscroll');if(!sc||!$('vvlienzo'))return;
+ const r=sc.getBoundingClientRect();const ox=px!=null?px-r.left:sc.clientWidth/2,oy=py!=null?py-r.top:sc.clientHeight/2;
+ const cx=(sc.scrollLeft+ox)/VV.zoom,cy=(sc.scrollTop+oy)/VV.zoom;
+ VV.zoom=z;$('vvlienzo').style.width=(z*100)+'%';$('vvz').textContent=(Number.isInteger(z)?z:z.toFixed(1))+'×';
+ sc.scrollLeft=cx*z-ox;sc.scrollTop=cy*z-oy;clearTimeout(VV._zt);VV._zt=setTimeout(vvDibujar,60);}
+function vvPellizco(){const sc=$('vvscroll');if(!sc||sc._pell)return;sc._pell=true;let d0=0,z0=1;
+ const dist=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+ sc.addEventListener('touchstart',ev=>{if(ev.touches.length===2){d0=dist(ev.touches);z0=VV.zoom;VV.pellizco=true;}},{passive:true});
+ sc.addEventListener('touchmove',ev=>{if(ev.touches.length===2&&d0){ev.preventDefault();const t=ev.touches;
+  vvZoomA(z0*dist(t)/d0,(t[0].clientX+t[1].clientX)/2,(t[0].clientY+t[1].clientY)/2);}},{passive:false});
+ const fin=ev=>{if(ev.touches.length<2){d0=0;setTimeout(()=>{VV.pellizco=false;},80);}};
+ sc.addEventListener('touchend',fin);sc.addEventListener('touchcancel',fin);}
+function vvVista(fija){let m=document.querySelector('meta[name=viewport]');if(!m)return;      // v197: mientras se valida, la pantalla no se agranda entera
+ if(fija){if(!m.dataset.orig)m.dataset.orig=m.content;m.content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';}
+ else if(m.dataset.orig)m.content=m.dataset.orig;}
 function vvModo(m){VV.modo=m;$('vvbm').classList.toggle('on',m==='mover');$('vvbd').classList.toggle('on',m==='dibujar');$('vvcan').style.touchAction=m==='dibujar'?'none':'auto';$('vvcan').style.pointerEvents=m==='dibujar'?'auto':'none';}
-function vvEventos(){const c=$('vvcan');vvModo(VV.modo);let pts=null;
+function vvEventos(){const c=$('vvcan');vvModo(VV.modo);vvPellizco();let pts=null;
  const pos=ev=>{const r=c.getBoundingClientRect();return [Math.max(0,Math.min(1,(ev.clientX-r.left)/r.width)),Math.max(0,Math.min(1,(ev.clientY-r.top)/r.height))];};
- c.addEventListener('pointerdown',ev=>{if(VV.modo!=='dibujar')return;ev.preventDefault();try{c.setPointerCapture(ev.pointerId);}catch(e){}pts=[pos(ev)];VV.dib=pts;});
- c.addEventListener('pointermove',ev=>{if(!pts)return;ev.preventDefault();const p=pos(ev);const u=pts[pts.length-1];if(Math.hypot(p[0]-u[0],p[1]-u[1])>0.004)pts.push(p);vvDibujar();});
+ c.addEventListener('pointerdown',ev=>{if(VV.modo!=='dibujar')return;if(!ev.isPrimary||VV.pellizco){pts=null;VV.dib=null;vvDibujar();return;}ev.preventDefault();try{c.setPointerCapture(ev.pointerId);}catch(e){}pts=[pos(ev)];VV.dib=pts;});
+ c.addEventListener('pointermove',ev=>{if(!pts)return;if(VV.pellizco){pts=null;VV.dib=null;vvDibujar();return;}ev.preventDefault();const p=pos(ev);const u=pts[pts.length-1];if(Math.hypot(p[0]-u[0],p[1]-u[1])>0.004)pts.push(p);vvDibujar();});
  const fin=ev=>{if(!pts)return;const P=pts;pts=null;VV.dib=null;if(P.length<2){vvDibujar();return;}
   const xs=P.map(p=>p[0]),ys=P.map(p=>p[1]);const b=[Math.min(...xs),Math.min(...ys),Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)].map(v=>+v.toFixed(4));
   if(b[2]<0.005&&b[3]<0.005){vvDibujar();return;}
