@@ -2076,4 +2076,53 @@ function vcSalir(){localStorage.removeItem('pms_vista_contratista');vcAplicar();
  const _usuarioSel=usuarioSel;usuarioSel=function(){_usuarioSel();vcAplicar();};
  setTimeout(vcAplicar,1200);})();
 
+// ================= v227 (Erix en campo, 6-nov-2026): la app del CONTRATISTA es simple: su mapa (solo los tramos de sus actividades, hasta donde
+// alcanza el dinero del contrato), la programación estimada que arma el sistema, el registro de obra con foto simple (sin IA) y la bitácora.
+function vcContrato(){const ctr=localStorage.getItem('pms_contrato')||'';return contratosLista().find(x=>x.contrato==ctr)||null;}
+const VC_ACT={'Sello de fisuras':[22,'sello'],'Parcheo (mezcla en caliente)':[23,'parcheo'],'Slurry (sello + slurry seal)':[24,'slurry'],'Microfresado':[25,'micro'],'Fresado + MDC/MSC':[27,'fresado']};
+let VC_PROG=null,VC_PROG_K='';
+function vcPrograma(){const c=vcContrato();if(!c)return [];const key=c.contrato+'|'+Object.keys(DATOS).join(',')+'|'+(c.items||[]).length;if(VC_PROG&&VC_PROG_K==key)return VC_PROG;
+ const esc=DATOS['Base BC']?'Base BC':Object.keys(DATOS)[0];if(!esc)return [];const anios=Object.keys(DATOS[esc]).map(Number).sort((a,b)=>a-b);
+ const items=(c.items||[]).filter(i=>VC_ACT[i.actividad]&&+i.precio>0);const aiu=c.aiu||{};const fa=1+((+aiu.A_pct||0)+(+aiu.I_pct||0)+(+aiu.U_pct||0))/100+((+aiu.U_pct||0)/100)*((+aiu.IVA_sobre_U_pct||0)/100);
+ const valor=+c.valor||0;const nsem=Math.max(1,Math.round((+c.plazo_meses||4)*4.33));let filas=[];
+ anios.forEach(a=>{(DATOS[esc][a]||[]).forEach(f=>{if(f[19]=='none'||f[1]=='none'||f[1]=='excl')return;items.forEach(it=>{const q=+f[VC_ACT[it.actividad][0]]||0;if(q<=0)return;filas.push({cod:f[0],t:f[18],pri:+f[6]||99,rango:+f[15]||0,anio:a,act:it.actividad,un:it.unidad,q:q,pu:+it.precio,costo:q*it.precio*fa,L:f[17],k:VC_ACT[it.actividad][1],desc:f[5]||''});});});});
+ filas.sort((x,y)=>x.anio-y.anio||x.pri-y.pri||x.rango-y.rango||x.t.localeCompare(y.t,undefined,{numeric:true}));
+ let acum=0;const qAct={};const prog=[];
+ filas.forEach(r=>{const it=items.find(i=>i.actividad==r.act);const cap=+it.cantidad||0;if(cap&&(qAct[r.act]||0)+r.q>cap*1.02)return;if(valor&&acum+r.costo>valor*1.005)return;acum+=r.costo;qAct[r.act]=(qAct[r.act]||0)+r.q;r.acum=acum;r.sem=valor?Math.min(nsem,Math.max(1,Math.ceil(acum/valor*nsem))):1;prog.push(r);});
+ // lo ya registrado en este celular o en el PC (historial de la ficha) marca el tramo como ejecutado
+ prog.forEach(r=>{const f=FICHA[r.cod]||{};const h=(f.hist||[]).some(x=>String(x[1]).toLowerCase()==r.act.toLowerCase()&&(!c.contrato||!x[11]||x[11]==c.contrato));const p=registros().some(x=>x.codigo==r.cod&&x.tipo=='obra'&&String(x.actividad||'').toLowerCase()==r.act.toLowerCase());r.hecho=h||p;});
+ VC_PROG=prog;VC_PROG_K=key;return prog;}
+function vcSemanaFecha(c,s){try{if(!c.fecha_inicio)return '';const d=new Date(c.fecha_inicio+'T00:00:00');d.setDate(d.getDate()+(s-1)*7);return d.toLocaleDateString('es-CO',{day:'2-digit',month:'short'});}catch(e){return '';}}
+function vcProgramacion(){const c=vcContrato();if(!c){alert('Elija primero el contrato (abra una ficha y escójalo).');return;}const prog=vcPrograma();const tot=prog.reduce((s,r)=>s+r.costo,0);const hechos=prog.filter(r=>r.hecho).length;
+ const porSem={};prog.forEach(r=>{(porSem[r.sem]=porSem[r.sem]||[]).push(r);});
+ let h=`<div style="background:#ef6c00;color:#fff;border-radius:8px;padding:8px 10px;margin:4px 0 8px"><b style="font-size:13px">${c.contratista||''} · ${c.contrato}</b><div style="font-size:11px;opacity:.95">Programación estimada por el sistema: ${prog.length} tramos · ${cop(tot)} de ${cop(+c.valor||0)} · ${hechos} ya registrados${c.fecha_inicio?' · desde el acta de inicio '+c.fecha_inicio:' · sin acta de inicio (las semanas se cuentan desde el inicio)'}</div></div>
+ <div style="font-size:11px;color:#666;margin:2px 0 6px">Orden: primero los tramos más urgentes del plan del PMS, hasta donde alcanza el dinero y las cantidades del contrato. Es una guía; el coordinador puede cambiar el orden. Toque un tramo para abrir su ficha y registrar la obra.</div>`;
+ Object.keys(porSem).map(Number).sort((a,b)=>a-b).forEach(s=>{const rs=porSem[s];const cs=rs.reduce((x,r)=>x+r.costo,0);h+=`<div style="background:#fff;border-radius:8px;padding:6px 10px;margin:5px 0"><b style="font-size:13px">Semana ${s}${vcSemanaFecha(c,s)?' · desde el '+vcSemanaFecha(c,s):''}</b> <span style="font-size:11px;color:#666">· ${rs.length} tramo(s) · ${cop(cs)}</span>`+
+  rs.map(r=>`<div onclick="masCerrar();ficha('${r.cod}',true)" style="display:flex;gap:8px;align-items:center;border-top:1px solid #eee;padding:4px 0;cursor:pointer;${r.hecho?'opacity:.55':''}"><span style="width:10px;height:10px;border-radius:5px;background:${(COL[r.k]||['#004A61'])[0]};flex:none"></span><div style="flex:1;font-size:12px"><b>${r.act}</b> · ${fmt(r.q,1)} ${r.un}<div style="font-size:11px;color:#666">Trayecto ${r.t} · ${r.cod} · ${r.L} m${r.hecho?' · ✓ registrado':''}</div></div><span style="font-size:11px;color:#444;white-space:nowrap">${cop(r.costo)}</span></div>`).join('')+`</div>`;});
+ if(!prog.length)h+='<div style="padding:14px;color:#666;text-align:center">No hay tramos con las actividades de este contrato en el plan del PMS, o el contrato no tiene ítems con precio. Revise en el PC: Contratos → Ficha del contrato.</div>';
+ masPanel('📅 Programación estimada',h);}
+(function(){if(DATA!=='Campo')return;
+ const st=document.createElement('style');st.textContent='body.vc #pbody{display:none!important} body.vc #pmin{display:none!important} body.vc #cuso,body.vc #cusotx{display:none!important}';document.head.appendChild(st);
+ // mapa del contratista: solo sus tramos (los demás en gris claro)
+ const _dibujar=dibujar;dibujar=function(){if(!vcActiva())return _dibujar();try{capa.clearLayers();}catch(e){}const c=vcContrato();const prog=c?vcPrograma():[];const by={};prog.forEach(r=>{(by[r.cod]=by[r.cod]||[]).push(r);});
+  Object.keys(FICHA).forEach(cod=>{const f=FICHA[cod];const q=COORDS[cod];if(!q)return;const rs=by[cod];
+   if(!rs){L.polyline([[q[0],q[1]],[q[2],q[3]]],{color:'#cfd8dc',weight:3,opacity:.6}).addTo(capa);return;}
+   const r=rs[0];const ln=L.polyline([[q[0],q[1]],[q[2],q[3]]],{color:(COL[r.k]||['#004A61'])[0],weight:7,opacity:r.hecho?.45:.95,dashArray:r.hecho?'4,6':null});
+   ln.bindTooltip(`<b>${cod}</b> · trayecto ${r.t} · ${r.L} m<br>`+rs.map(x=>`<b>${x.act}</b>: ${fmt(x.q,1)} ${x.un} · semana ${x.sem}${x.hecho?' · ✓ registrado':''}`).join('<br>')+'<br><i>clic para registrar la obra</i>');ln.on('click',()=>ficha(cod,!esMovil));ln.addTo(capa);});
+  const tot=prog.reduce((s,r)=>s+r.costo,0);const k=$('kpi');if(k)k.innerHTML=c?`Tramos del contrato ${c.contrato}: ${prog.length} · ${cop(tot)} de ${cop(+c.valor||0)}`:'Elija el contrato en la ficha';
+  const lg=$('leg');if(lg)lg.innerHTML='<b>Mis tramos</b>'+[...new Set(prog.map(r=>r.k))].map(k_=>`<div><i style="background:${(COL[k_]||['#004A61'])[0]}"></i>${(COL[k_]||['','?'])[1]}</div>`).join('')+'<div><i style="background:#cfd8dc"></i>fuera del contrato</div><div><i style="background:#bbb;opacity:.5"></i>punteado: ya registrado</div>';};
+ // ficha del contratista: foto simple (sin IA), sin daños ni drenajes
+ const _campoHtml2=campoHtml;campoHtml=function(cod){let h=_campoHtml2(cod);if(!vcActiva())return h;
+  const i0=h.indexOf('<div style="margin-top:6px;background:#eef6f8');if(i0>=0){const i1=h.indexOf('</div></div>',i0);if(i1>i0)h=h.slice(0,i0)+h.slice(i1+12);}
+  h=h.replace(/<button type="button" onclick="fotoGuiada\(\)"[^>]*>[^<]*<\/button> <span style="font-size:10px;color:#666">[^<]*<\/span>\s*<details[^>]*><summary[^>]*>[^<]*<\/summary>/,'<b>📷 Fotos de la actividad</b> <span style="font-size:11px;color:#455a64">(antes, durante y después; se guardan tal cual, sin análisis de IA)</span><br>');
+  h=h.replace('<input id="cfoto" type="file" accept="image/*" multiple onchange="fotosArchivo(this)"></details>','<input id="cfoto" type="file" accept="image/*" capture="environment" multiple onchange="fotosArchivo(this)" style="margin:4px 0">');
+  setTimeout(()=>{try{fotoUsoSel('sin_ia',true);}catch(e){}},50);return h;};
+ // «Más» del contratista: agrega la programación; y el botón en la barra
+ const _verMas2=verMas;verMas=function(){_verMas2();if(!vcActiva())return;const v=masCaja();const it=v&&[...v.querySelectorAll('div[onclick]')].find(d=>/bitacoraAbrir/.test(d.getAttribute('onclick')));
+  if(it)it.insertAdjacentHTML('afterend',`<div onclick="vcProgramacion()" style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:8px;padding:9px 10px;margin:5px 0;cursor:pointer"><span style="font-size:22px">📅</span><div style="flex:1"><b style="font-size:13px">Programación estimada</b><div style="font-size:11px;color:#666">qué tramos y en qué semana, según el plan del PMS y el dinero del contrato</div></div><span style="color:#999">›</span></div>`);};
+ const f=document.querySelector('.gps .fila');if(f&&!$('bprog'))f.insertAdjacentHTML('beforeend',' <button id="bprog" onclick="vcProgramacion()" style="display:none" title="programación estimada del contrato">📅 Programación</button>');
+ const _vcAplicar=vcAplicar;vcAplicar=function(){_vcAplicar();const on=vcActiva();const b=$('bprog');if(b)b.style.display=on?'':'none';try{VC_PROG=null;dibujar();}catch(e){}};
+ const _contratoSel=contratoSel;contratoSel=function(){_contratoSel();VC_PROG=null;if(vcActiva()){try{dibujar();}catch(e){}}};
+ setTimeout(()=>{try{vcAplicar();}catch(e){}},1500);})();
+
 </script></body></html>
