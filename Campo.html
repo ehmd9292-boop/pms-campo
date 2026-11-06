@@ -2194,4 +2194,51 @@ function vcFicha(cod,abrir){const f=FICHA[cod];if(!f)return;if(f.pri==null){cons
   try{if(on&&fichaCod)fichaInterna(fichaCod,fichaAbierta);}catch(e){}};
  setTimeout(()=>{try{vcAplicar();}catch(e){}},1800);})();
 
+// ================= v229 (Erix en campo, 6-nov-2026): mapa solo con los tramos del contrato, convenciones, ficha que abre al tocar,
+// frente de la bitácora por lista o GPS (sin escribir), y el microfresado se toma del plan (primer año) y el resto del dinero va a slurry y sello.
+let VC_MICRO_ANIOS=1;      // cuántos años del plan se toman para el microfresado (1 = solo el primer año del plan)
+const _vcProg3=vcPrograma;vcPrograma=function(){vcContratoAuto();const c=vcContrato();if(!c)return [];const key='v229|'+VC_MICRO_ANIOS+'|'+c.contrato+'|'+Object.keys(DATOS).join(',')+'|'+(c.items||[]).length;if(VC_PROG&&VC_PROG_K==key)return VC_PROG;
+ const esc=DATOS['Base BC']?'Base BC':Object.keys(DATOS)[0];if(!esc)return [];const anios=Object.keys(DATOS[esc]).map(Number).sort((a,b)=>a-b);const aMicro=anios[0]+VC_MICRO_ANIOS-1;
+ const items={};(c.items||[]).forEach(i=>{if(VC_Q[i.actividad]&&+i.precio>0)items[i.actividad]={pu:+i.precio,cap:+i.cantidad||0,un:i.unidad||VC_Q[i.actividad][1]};});
+ const aiu=c.aiu||{};const fa=1+((+aiu.A_pct||0)+(+aiu.I_pct||0)+(+aiu.U_pct||0))/100+((+aiu.U_pct||0)/100)*((+aiu.IVA_sobre_U_pct||0)/100);
+ const valor=+c.valor||0;const nsem=Math.max(1,Math.round((+c.plazo_meses||4)*4.33));const vistos=new Set();const tramos=[];
+ anios.forEach(a=>{(DATOS[esc][a]||[]).forEach(f=>{if(vistos.has(f[0]))return;if(f[19]=='none'||f[1]=='none'||f[1]=='excl')return;const acts=[];
+  Object.keys(items).forEach(act=>{const q=+f[VC_Q[act][0]]||0;if(q>0)acts.push({act:act,q:q,un:items[act].un,costo:q*items[act].pu*fa});});
+  if(!acts.length)return;vistos.add(f[0]);const micro=acts.find(x=>x.act=='Microfresado');const slu=acts.find(x=>x.act=='Slurry (sello + slurry seal)');
+  tramos.push({cod:f[0],t:f[18],pri:+f[6]||99,rango:+f[15]||0,anio:a,L:f[17],desc:f[5]||'',acts:acts,costo:acts.reduce((s,x)=>s+x.costo,0),fase:micro?1:(slu?2:3),k:micro?'micro':(slu?'slurry':'sello')});});});
+ const porUrg=(x,y)=>x.anio-y.anio||x.pri-y.pri||x.rango-y.rango;const prN=c_=>{const m=/Pr (\d+)/.exec(String(c_));return m?+m[1]:0;};const tN=t_=>parseFloat(String(t_).replace(/[^\d.]/g,''))||0;
+ const porVia=(x,y)=>tN(x.t)-tN(y.t)||String(x.t).localeCompare(String(y.t))||prN(x.cod)-prN(y.cod);
+ const usado={};let gasto=0;const prog=[];
+ const cabe=tr=>{if(valor&&gasto+tr.costo>valor*1.005)return false;for(const x of tr.acts){if(x.act!='Slurry (sello + slurry seal)')continue;const cap=items[x.act].cap;if(cap&&(usado[x.act]||0)+x.q>cap*1.02)return false;}return true;};
+ const toma=tr=>{gasto+=tr.costo;tr.acts.forEach(x=>{usado[x.act]=(usado[x.act]||0)+x.q;});prog.push(tr);};
+ [1,2,3].forEach(fase=>{tramos.filter(t=>t.fase==fase&&(fase!=1||t.anio<=aMicro)).sort(porUrg).forEach(tr=>{if(cabe(tr))toma(tr);});});
+ prog.sort((x,y)=>x.fase-y.fase||porVia(x,y));let acum=0;prog.forEach(r=>{acum+=r.costo;r.acum=acum;r.sem=valor?Math.min(nsem,Math.max(1,Math.ceil(acum/valor*nsem))):1;
+  r.acts.forEach(x=>{const f=FICHA[r.cod]||{};const h=(f.hist||[]).some(z=>String(z[1]).toLowerCase()==x.act.toLowerCase());const p=registros().some(z=>z.codigo==r.cod&&z.tipo=='obra'&&String(z.actividad||'').toLowerCase()==x.act.toLowerCase());x.hecho=h||p;});r.hecho=r.acts.every(x=>x.hecho);});
+ prog.usado=usado;prog.items=items;prog.gasto=gasto;prog.aMicro=aMicro;VC_PROG=prog;VC_PROG_K=key;return prog;};
+vcDibujar=function(){vcContratoAuto();try{capa.clearLayers();}catch(e){}try{capaInt.clearLayers();}catch(e){}try{if(window.MODLAY){map.removeLayer(MODLAY);window.MODLAY=null;}}catch(e){}
+ const c=vcContrato();const prog=c?vcPrograma():[];
+ prog.forEach(r=>{const q=COORDS[r.cod];if(!q)return;const ln=L.polyline([[q[0],q[1]],[q[2],q[3]]],{color:(COL[r.k]||['#004A61'])[0],weight:8,opacity:r.hecho?.45:.95,dashArray:r.hecho?'4,6':null});
+  ln.bindTooltip(`<b>Trayecto ${r.t} · PR ${prTxt((FICHA[r.cod]||{}).pri||0)}</b> · ${r.L} m · semana ${r.sem}<br>`+r.acts.map(x=>`${x.act}: ${fmt(x.q,1)} ${x.un}${x.hecho?' ✓':''}`).join('<br>')+'<br><i>toque para registrar la obra</i>');
+  ln.on('click',()=>{try{ficha(r.cod,true);}catch(e){alert('No pude abrir el tramo: '+e.message);}});ln.addTo(capa);});
+ const k=$('kpi');if(k)k.innerHTML=c?`Tramos del contrato ${c.contrato}: ${prog.length} · ${cop(prog.gasto||0)} de ${cop(+c.valor||0)}`:'Sin contrato activo';
+ const lg=$('leg');if(lg)lg.innerHTML='<b>Mis tramos</b><div><i style="background:'+(COL.micro||['#004A61'])[0]+'"></i>microfresado + sello + slurry</div><div><i style="background:'+(COL.slurry||['#FFC107'])[0]+'"></i>sello + slurry</div><div><i style="background:'+(COL.sello||['#9E9E9E'])[0]+'"></i>solo sello de fisuras</div><div><i style="background:#bbb;opacity:.5"></i>punteado: ya registrado</div><div style="margin-top:4px;color:#666">Toque un tramo para registrar la obra.</div>';};
+// bitácora: el frente se escoge de la lista (trayecto, calzada, carril, PR) o lo pone el GPS; no se escribe a mano
+function bitacoraFrenteTxt(){const v=id=>$(id)?String($(id).value).trim():'';const t=v('bft'),cz=v('bfcz'),ca=v('bfca'),p1=v('bfp1'),p2=v('bfp2');const s=(t?'Trayecto '+t:'')+(cz?' · '+cz:'')+(ca?' '+ca:'')+(p1?' · PR '+p1:'')+(p2?' a '+p2:'');if($('bfrente'))$('bfrente').value=s.trim();return s.trim();}
+function bitacoraFrenteSel(q){const v=id=>$(id)?String($(id).value):'';if(q=='t'){const t=v('bft');if($('bfcz'))$('bfcz').innerHTML='<option value="">—</option>'+destCz(t,'');if($('bfca'))$('bfca').innerHTML='<option value="">—</option>';}
+ if(q=='cz'){if($('bfca'))$('bfca').innerHTML='<option value="">—</option>'+destCar(v('bft'),v('bfcz'),'');}bitacoraFrenteTxt();}
+function bitacoraFrenteGps(cual){if(!ultimaPos){alert('Active primero 📍 Mi ubicación y espere la posición.');return;}const sc=seccionCercana(ultimaPos);if(!sc||!FICHA[sc.cod]){alert('No encontré una sección de la vía cerca.');return;}const f=FICHA[sc.cod];
+ if($('bft')){$('bft').value=f.t;bitacoraFrenteSel('t');}if($('bfcz')){$('bfcz').value=f.cz;bitacoraFrenteSel('cz');}if($('bfca'))$('bfca').value=f.car;
+ const pr=prTxt(sc.pr!=null?Math.round(sc.pr):(f.pri||0));if(cual=='f'){if($('bfp2'))$('bfp2').value=pr;}else{if($('bfp1'))$('bfp1').value=pr;}bitacoraFrenteTxt();}
+const _bitAbrir=bitacoraAbrir;bitacoraAbrir=function(pre){_bitAbrir(pre);const inp=$('bfrente');if(!inp)return;
+ let t='',cz='',ca='',pr='';try{const sc=ultimaPos?seccionCercana(ultimaPos):null;if(sc&&FICHA[sc.cod]){const f=FICHA[sc.cod];t=f.t;cz=f.cz;ca=f.car;pr=prTxt(sc.pr!=null?Math.round(sc.pr):(f.pri||0));}}catch(e){}
+ const opc_=(h,sel)=>'<option value="">—</option>'+h;
+ inp.insertAdjacentHTML('beforebegin',`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select id="bft" onchange="bitacoraFrenteSel('t')" style="flex:1;min-width:90px">${opc_(destTray(t))}</select><select id="bfcz" onchange="bitacoraFrenteSel('cz')" style="flex:1;min-width:90px">${opc_(destCz(t,cz))}</select><select id="bfca" onchange="bitacoraFrenteTxt()" style="flex:1;min-width:90px">${opc_(destCar(t,cz,ca))}</select></div>
+ <div style="display:flex;gap:6px;align-items:center;margin-top:4px;font-size:12px">PR inicio <input id="bfp1" value="${pr}" placeholder="15+000" style="width:78px" oninput="bitacoraFrenteTxt()"> <button type="button" onclick="bitacoraFrenteGps('i')" title="tomar del GPS">📍</button> PR fin <input id="bfp2" placeholder="15+900" style="width:78px" oninput="bitacoraFrenteTxt()"> <button type="button" onclick="bitacoraFrenteGps('f')" title="tomar del GPS">📍</button></div>`);
+ inp.type='hidden';inp.readOnly=true;bitacoraFrenteTxt();};
+(function(){if(DATA!=='Campo')return;
+ const st=document.createElement('style');st.textContent='body.vc #bleg{display:inline-block!important}';document.head.appendChild(st);
+ const _fud=fotoUsoDefecto;fotoUsoDefecto=function(){if(vcActiva()){try{fotoUsoSel('sin_ia',false);}catch(e){}return;}return _fud();};
+ const _fi3=fichaInterna;fichaInterna=function(cod,abrir){if(vcActiva()){try{return vcFicha(cod,true);}catch(e){console.error(e);}}return _fi3(cod,abrir);};
+})();
+
 </script></body></html>
