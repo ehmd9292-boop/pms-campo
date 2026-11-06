@@ -2273,4 +2273,75 @@ function vcSalirCorreo(){localStorage.removeItem('pms_vista_contratista');localS
    if(it)it.insertAdjacentHTML('afterend',`<div onclick="masCerrar();vcLoginPantalla()" style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:8px;padding:9px 10px;margin:5px 0;cursor:pointer"><span style="font-size:22px">✉️</span><div style="flex:1"><b style="font-size:13px">Entrar como contratista (correo)</b><div style="font-size:11px;color:#666">lo que ve el contratista cuyo correo está registrado en el PC</div></div><span style="color:#999">›</span></div>`);};}
 })();
 
+// ================= v231 (Erix, 6-nov-2026): en vez de programación por semanas, el LISTADO de tramos a intervenir ordenado por trayecto
+// (con calzada y carril), con filtros por trayecto, intervención y estado; el mismo filtro aplica al mapa. El dinero se cierra al valor del
+// contrato dando prioridad al SLURRY SEAL (puede pasarse de la cantidad contratada); el sello de fisuras va hasta su cantidad contratada y lo
+// que sobre de dinero se usa en sello de los tramos restantes. Bitácora: los selectores dicen Trayecto / Calzada / Carril.
+var VC_FILTRO={t:'',k:'',e:''};
+const VC_FASE={1:'microfresado + sello + slurry',2:'slurry seal (+ sello)',3:'solo sello de fisuras'};
+function vcCzCar(cod){const f=FICHA[cod]||{};if(f.cz||f.car)return [f.cz||'',f.car||''];const p=String(cod).split('-');return p.length>=3?[p[1],p[2]]:['',''];}
+const _vcProg5=vcPrograma;vcPrograma=function(){vcContratoAuto();const c=vcContrato();if(!c)return [];const key='v231|'+VC_MICRO_ANIOS+'|'+c.contrato+'|'+Object.keys(DATOS).join(',')+'|'+(c.items||[]).length;if(VC_PROG&&VC_PROG_K==key)return VC_PROG;
+ const esc=DATOS['Base BC']?'Base BC':Object.keys(DATOS)[0];if(!esc)return [];const anios=Object.keys(DATOS[esc]).map(Number).sort((a,b)=>a-b);const aMicro=anios[0]+VC_MICRO_ANIOS-1;
+ const items={};(c.items||[]).forEach(i=>{if(VC_Q[i.actividad]&&+i.precio>0)items[i.actividad]={pu:+i.precio,cap:+i.cantidad||0,un:i.unidad||VC_Q[i.actividad][1]};});
+ const aiu=c.aiu||{};const fa=1+((+aiu.A_pct||0)+(+aiu.I_pct||0)+(+aiu.U_pct||0))/100+((+aiu.U_pct||0)/100)*((+aiu.IVA_sobre_U_pct||0)/100);
+ const valor=+c.valor||0;const nsem=Math.max(1,Math.round((+c.plazo_meses||4)*4.33));const vistos=new Set();const tramos=[];
+ const SLU='Slurry (sello + slurry seal)',SEL='Sello de fisuras',MIC='Microfresado';
+ anios.forEach(a=>{(DATOS[esc][a]||[]).forEach(f=>{if(vistos.has(f[0]))return;if(f[19]=='none'||f[1]=='none'||f[1]=='excl')return;const acts=[];
+  Object.keys(items).forEach(act=>{const q=+f[VC_Q[act][0]]||0;if(q>0)acts.push({act:act,q:q,un:items[act].un,costo:q*items[act].pu*fa});});
+  if(!acts.length)return;vistos.add(f[0]);const micro=acts.find(x=>x.act==MIC);const slu=acts.find(x=>x.act==SLU);const cc=vcCzCar(f[0]);
+  tramos.push({cod:f[0],t:f[18],cz:cc[0],car:cc[1],pri:+f[6]||99,rango:+f[15]||0,anio:a,L:f[17],desc:f[5]||'',acts:acts,fase:micro?1:(slu?2:3),k:micro?'micro':(slu?'slurry':'sello')});});});
+ const porUrg=(x,y)=>x.anio-y.anio||x.pri-y.pri||x.rango-y.rango;const prN=c_=>{const m=/Pr (\d+)/.exec(String(c_));return m?+m[1]:0;};const tN=t_=>parseFloat(String(t_).replace(/[^\d.]/g,''))||0;
+ const porVia=(x,y)=>tN(x.t)-tN(y.t)||String(x.t).localeCompare(String(y.t))||String(x.cz).localeCompare(String(y.cz))||String(x.car).localeCompare(String(y.car))||prN(x.cod)-prN(y.cod);
+ const usado={};let gasto=0;const prog=[];const capSel=(items[SEL]||{}).cap||0;
+ const costoDe=tr=>tr.acts.filter(x=>!x.omitido).reduce((s,x)=>s+x.costo,0);
+ const toma=tr=>{tr.costo=costoDe(tr);gasto+=tr.costo;tr.acts.forEach(x=>{if(!x.omitido)usado[x.act]=(usado[x.act]||0)+x.q;});prog.push(tr);};
+ // fase 1: microfresado del primer año del plan, con su sello y su slurry (el micro es lo que más urge)
+ tramos.filter(t=>t.fase==1&&t.anio<=aMicro).sort(porUrg).forEach(tr=>{if(!valor||gasto+costoDe(tr)<=valor)toma(tr);});
+ // fase 2: SLURRY SEAL con prioridad (todos los años del plan, por urgencia; puede pasarse de la cantidad contratada). El sello de esos tramos
+ // entra mientras quepa en la cantidad contratada de sello; si no, el tramo entra solo con slurry (el sello lo hará BTS el otro año).
+ tramos.filter(t=>t.fase==2).sort(porUrg).forEach(tr=>{const s=tr.acts.find(x=>x.act==SEL);if(s&&capSel&&(usado[SEL]||0)+s.q>capSel*1.02)s.omitido=true;
+  if(valor&&gasto+costoDe(tr)>valor){if(s&&!s.omitido){s.omitido=true;if(gasto+costoDe(tr)>valor){s.omitido=false;return;}}else return;}toma(tr);});
+ // fase 3: lo que sobre, en sello de fisuras de los tramos que solo necesitan sello (por urgencia)
+ // (solo tramos con al menos 30 ml de sello: mandar al contratista por 1 o 2 ml no vale la pena; eso lo hace la cuadrilla de BTS)
+ tramos.filter(t=>t.fase==3&&t.acts.reduce((s,x)=>s+x.q,0)>=30).sort(porUrg).forEach(tr=>{if(!valor||gasto+costoDe(tr)<=valor)toma(tr);});
+ prog.sort(porVia);let acum=0;prog.forEach(r=>{acum+=r.costo;r.acum=acum;r.sem=valor?Math.min(nsem,Math.max(1,Math.ceil(acum/valor*nsem))):1;
+  r.acts.forEach(x=>{const f=FICHA[r.cod]||{};const h=(f.hist||[]).some(z=>String(z[1]).toLowerCase()==x.act.toLowerCase());const p=registros().some(z=>z.codigo==r.cod&&z.tipo=='obra'&&String(z.actividad||'').toLowerCase()==x.act.toLowerCase());x.hecho=h||p;});r.hecho=r.acts.filter(x=>!x.omitido).every(x=>x.hecho);});
+ prog.usado=usado;prog.items=items;prog.gasto=gasto;prog.aMicro=aMicro;prog.fa=fa;VC_PROG=prog;VC_PROG_K=key;return prog;};
+function vcPasaFiltro(r){if(VC_FILTRO.t&&String(r.t)!=VC_FILTRO.t)return false;if(VC_FILTRO.k&&r.k!=VC_FILTRO.k)return false;if(VC_FILTRO.e=='p'&&r.hecho)return false;if(VC_FILTRO.e=='h'&&!r.hecho)return false;return true;}
+function vcFiltroHtml(prog,idp){const ts=[...new Set(prog.map(r=>String(r.t)))].sort((a,b)=>(parseFloat(a.replace(/[^\d.]/g,''))||0)-(parseFloat(b.replace(/[^\d.]/g,''))||0)||a.localeCompare(b));
+ const o=(v,l,s)=>`<option value="${v}"${s==v?' selected':''}>${l}</option>`;
+ return `<div style="display:flex;gap:5px;flex-wrap:wrap;margin:4px 0"><select onchange="VC_FILTRO.t=this.value;vcFiltroCambio('${idp}')" style="flex:1;min-width:100px;font-size:12px">${o('','Todos los trayectos',VC_FILTRO.t)}${ts.map(t=>o(t,'Trayecto '+t,VC_FILTRO.t)).join('')}</select>`+
+  `<select onchange="VC_FILTRO.k=this.value;vcFiltroCambio('${idp}')" style="flex:1;min-width:100px;font-size:12px">${o('','Toda intervención',VC_FILTRO.k)}${o('micro','Microfresado + sello + slurry',VC_FILTRO.k)}${o('slurry','Slurry seal (+ sello)',VC_FILTRO.k)}${o('sello','Solo sello de fisuras',VC_FILTRO.k)}</select>`+
+  `<select onchange="VC_FILTRO.e=this.value;vcFiltroCambio('${idp}')" style="flex:1;min-width:90px;font-size:12px">${o('','Todos',VC_FILTRO.e)}${o('p','Pendientes',VC_FILTRO.e)}${o('h','Registrados',VC_FILTRO.e)}</select></div>`;}
+function vcFiltroCambio(desde){try{dibujar();}catch(e){}if(desde=='lista')vcListado();else{const f=$('vcfilmapa');if(f)f.innerHTML=vcFiltroHtml(vcPrograma(),'mapa');}}
+function vcListado(){vcContratoAuto();const c=vcContrato();if(!c){alert('No hay contrato activo en la app. En el PC: Contratos → Ficha del contrato (Activo).');return;}const prog=vcPrograma();const sel=prog.filter(vcPasaFiltro);
+ const tot=prog.gasto||0;const hechos=prog.filter(r=>r.hecho).length;const it=prog.items||{},u=prog.usado||{};
+ const cant=Object.keys(it).map(a=>{const cap=it[a].cap,q=u[a]||0;return `${a.replace(' (sello + slurry seal)',' seal')}: <b>${fmt(q,0)}</b> ${it[a].un}${cap?' de '+fmt(cap,0)+(q>cap*1.02?' <span style="color:#b26a00">(se pasa: prioridad al slurry)</span>':''):''}`;}).join('<br>');
+ let h=`<div style="background:#ef6c00;color:#fff;border-radius:8px;padding:8px 10px;margin:4px 0 8px"><b style="font-size:13px">${c.contratista||''} · ${c.contrato}</b><div style="font-size:11px;opacity:.95">${prog.length} tramos a intervenir · ${cop(tot)} de ${cop(+c.valor||0)} (con AIU e IVA) · ${hechos} ya registrados</div></div>
+ <div style="background:#fff;border-radius:8px;padding:6px 10px;margin:4px 0;font-size:12px"><b>Cantidades que resultan</b><br>${cant}</div>
+ <div style="font-size:11px;color:#666;margin:2px 0 4px">Prioridad: microfresado del primer año del plan, luego slurry seal (puede pasar la cantidad contratada) y el sello hasta su cantidad; el sello que no cabe lo hace BTS. Orden por trayecto, calzada, carril y PR. Toque un tramo para abrir su ficha y registrar.</div>`+vcFiltroHtml(prog,'lista');
+ const porT={};sel.forEach(r=>{(porT[r.t]=porT[r.t]||[]).push(r);});const tN=t_=>parseFloat(String(t_).replace(/[^\d.]/g,''))||0;
+ h+=`<div style="font-size:11px;color:#444;margin:2px 0">${sel.length} tramo(s) en la lista · ${cop(sel.reduce((s,r)=>s+r.costo,0))}</div>`;
+ Object.keys(porT).sort((a,b)=>tN(a)-tN(b)||a.localeCompare(b)).forEach(t=>{const rs=porT[t];const cs=rs.reduce((x,r)=>x+r.costo,0);h+=`<div style="background:#fff;border-radius:8px;padding:6px 10px;margin:5px 0"><b style="font-size:13px">Trayecto ${t}</b> <span style="font-size:11px;color:#666">· ${rs.length} tramo(s) · ${cop(cs)}</span>`+
+  rs.map(r=>`<div onclick="masCerrar();ficha('${r.cod}',true)" style="display:flex;gap:8px;align-items:center;border-top:1px solid #eee;padding:4px 0;cursor:pointer;${r.hecho?'opacity:.55':''}"><span style="width:10px;height:10px;border-radius:5px;background:${(COL[r.k]||['#004A61'])[0]};flex:none"></span><div style="flex:1;font-size:12px"><b>${r.cz}${r.car?' · '+r.car:''} · PR ${prTxt((FICHA[r.cod]||{}).pri||0)}</b> · ${r.L} m <span style="color:#666">(${VC_FASE[r.fase]})</span><div style="font-size:11px;color:#444">${r.acts.map(x=>x.omitido?`<s style="color:#999">${x.act}</s> <span style="color:#999">(lo hace BTS)</span>`:`${x.act.replace(' (sello + slurry seal)',' seal')}: ${fmt(x.q,1)} ${x.un}${x.hecho?' ✓':''}`).join(' · ')}</div></div><span style="font-size:11px;color:#444;white-space:nowrap">${cop(r.costo)}</span></div>`).join('')+`</div>`;});
+ if(!sel.length)h+='<div style="padding:14px;color:#666;text-align:center">Ningún tramo cumple el filtro.</div>';
+ masPanel('📋 Tramos a intervenir',h);}
+vcProgramacion=vcListado;
+vcDibujar=function(){vcContratoAuto();try{capa.clearLayers();}catch(e){}try{capaInt.clearLayers();}catch(e){}try{if(window.MODLAY){map.removeLayer(MODLAY);window.MODLAY=null;}}catch(e){}
+ const c=vcContrato();const prog=c?vcPrograma():[];const sel=prog.filter(vcPasaFiltro);
+ sel.forEach(r=>{const q=COORDS[r.cod];if(!q)return;const ln=L.polyline([[q[0],q[1]],[q[2],q[3]]],{color:(COL[r.k]||['#004A61'])[0],weight:8,opacity:r.hecho?.45:.95,dashArray:r.hecho?'4,6':null});
+  ln.bindTooltip(`<b>Trayecto ${r.t} · ${r.cz}${r.car?' · '+r.car:''} · PR ${prTxt((FICHA[r.cod]||{}).pri||0)}</b> · ${r.L} m<br>`+r.acts.map(x=>x.omitido?`<s>${x.act}</s> (lo hace BTS)`:`${x.act}: ${fmt(x.q,1)} ${x.un}${x.hecho?' ✓':''}`).join('<br>')+'<br><i>toque para registrar la obra</i>');
+  ln.on('click',()=>{try{ficha(r.cod,true);}catch(e){alert('No pude abrir el tramo: '+e.message);}});ln.addTo(capa);});
+ const k=$('kpi');if(k)k.innerHTML=c?`Tramos del contrato ${c.contrato}: ${sel.length}${sel.length!=prog.length?' de '+prog.length:''} · ${cop(sel.reduce((s,r)=>s+r.costo,0))}${sel.length!=prog.length?'':' de '+cop(+c.valor||0)}`:'Sin contrato activo';
+ const lg=$('leg');if(lg)lg.innerHTML='<b>Mis tramos</b><div id="vcfilmapa">'+vcFiltroHtml(prog,'mapa')+'</div><div><i style="background:'+(COL.micro||['#004A61'])[0]+'"></i>microfresado + sello + slurry</div><div><i style="background:'+(COL.slurry||['#FFC107'])[0]+'"></i>slurry seal (+ sello)</div><div><i style="background:'+(COL.sello||['#9E9E9E'])[0]+'"></i>solo sello de fisuras</div><div><i style="background:#bbb;opacity:.5"></i>punteado: ya registrado</div><div style="margin-top:4px;color:#666">Toque un tramo para registrar la obra.</div>';};
+(function(){if(DATA!=='Campo')return;
+ const st=document.createElement('style');st.textContent='body.vc #leg{max-width:260px} body.vc #leg select{max-width:100%}';document.head.appendChild(st);
+ const b=$('bprog');if(b){b.textContent='📋 Tramos';b.title='listado de tramos a intervenir, por trayecto';}
+ const _vm6=verMas;verMas=function(){_vm6();if(!vcActiva())return;const v=masCaja();if(!v)return;[...v.querySelectorAll('div[onclick]')].forEach(d=>{if(/vcProgramacion\(\)/.test(d.getAttribute('onclick')||'')){const bb=d.querySelector('b');if(bb)bb.textContent='Tramos a intervenir';const s=d.querySelector('div>div');if(s)s.textContent='listado por trayecto, calzada y carril, con filtros; es lo mismo que se ve en el mapa';const sp=d.querySelector('span');if(sp)sp.textContent='📋';}});};
+ // bitácora: que se vea qué es cada selector
+ const _bitAbrir6=bitacoraAbrir;bitacoraAbrir=function(pre){_bitAbrir6(pre);[['bft','Trayecto…'],['bfcz','Calzada…'],['bfca','Carril…']].forEach(([id,tx])=>{const s=$(id);if(s&&s.options.length&&s.options[0].value==='')s.options[0].textContent=tx;});
+  const _sel=bitacoraFrenteSel;};
+ const _bfs=bitacoraFrenteSel;bitacoraFrenteSel=function(q){_bfs(q);[['bfcz','Calzada…'],['bfca','Carril…']].forEach(([id,tx])=>{const s=$(id);if(s&&s.options.length&&s.options[0].value==='')s.options[0].textContent=tx;});};
+})();
+
 </script></body></html>
