@@ -2241,4 +2241,36 @@ const _bitAbrir=bitacoraAbrir;bitacoraAbrir=function(pre){_bitAbrir(pre);const i
  const _fi3=fichaInterna;fichaInterna=function(cod,abrir){if(vcActiva()){try{return vcFicha(cod,true);}catch(e){console.error(e);}}return _fi3(cod,abrir);};
 })();
 
+// ================= v230 (Erix, 6-nov-2026): entrada del contratista por CORREO (validado contra los usuarios del PC) y app solo-contratista.
+// window.CONTRATISTA_APP=true (lo pone publicar_contratista.py en la app aparte pms-contratista): la app arranca pidiendo el correo y
+// solo muestra lo del contrato de ese contratista. En la app completa, ☰ Más → «Entrar como contratista (correo)» hace lo mismo.
+function vcUsuarioCorreo(correo){correo=String(correo||'').trim().toLowerCase();if(!correo)return null;return usuariosDet().find(u=>String(u.correo||'').trim().toLowerCase()==correo)||null;}
+function vcEntrarCorreo(correo){const u=vcUsuarioCorreo(correo);if(!u){alert('Ese correo no está autorizado. Pida al coordinador de BTS que lo registre en Contratos → Usuarios y cuadrillas (con su contrato).');return false;}
+ if(!u.contrato){alert('El usuario '+u.nombre+' no tiene contrato asignado en el PC. Pida al coordinador que lo complete.');return false;}
+ localStorage.setItem('pms_usuario',u.nombre);localStorage.setItem('pms_contrato',u.contrato);if(u.contratista)localStorage.setItem('pms_contratista',u.contratista);localStorage.setItem('pms_correo',String(correo).trim().toLowerCase());localStorage.setItem('pms_vista_contratista','1');
+ const lg=$('vclogin');if(lg)lg.remove();try{vcAplicar();dibujar();}catch(e){}return true;}
+function vcLoginPantalla(msg){if($('vclogin'))return;const d=document.createElement('div');d.id='vclogin';d.style.cssText='position:fixed;inset:0;z-index:99999;background:#f0f2f5;display:flex;align-items:center;justify-content:center;padding:18px';
+ const listo=!!((VERSION&&VERSION.usuarios&&VERSION.usuarios.length)||(ESTADO.usuarios_det&&ESTADO.usuarios_det.length));
+ d.innerHTML=`<div style="background:#fff;border-radius:14px;padding:22px 18px;max-width:420px;width:100%;box-shadow:0 4px 18px rgba(0,0,0,.15)"><div style="font-size:20px;font-weight:bold;color:#004A61">PMS BTS · Contratistas</div><div style="font-size:12px;color:#666;margin:6px 0 14px">Registro de obra y bitácora del contrato. Entre con el correo que BTS registró para su empresa.</div>
+ <input id="vccorreo" type="email" placeholder="correo@empresa.com" style="width:100%;font-size:16px;padding:10px;border:1px solid #bbb;border-radius:8px" value="${localStorage.getItem('pms_correo')||''}">
+ <button type="button" onclick="vcEntrarCorreo($('vccorreo').value)" style="width:100%;margin-top:10px;border:0;border-radius:8px;padding:12px;background:#ef6c00;color:#fff;font-weight:bold;font-size:15px">Entrar</button>
+ <div id="vcloginmsg" style="font-size:11px;color:#b26a00;margin-top:8px">${msg||(listo?'':'Cargando los datos de la vía… espere unos segundos y toque Entrar.')}</div>
+ ${window.CONTRATISTA_APP?'':'<div onclick="vcLoginCerrar()" style="font-size:11px;color:#004A61;margin-top:12px;text-align:center;cursor:pointer">Soy de BTS: volver a la app completa</div>'}</div>`;document.body.appendChild(d);}
+function vcLoginCerrar(){const lg=$('vclogin');if(lg)lg.remove();}
+function vcSalirCorreo(){localStorage.removeItem('pms_vista_contratista');localStorage.removeItem('pms_correo');if(window.CONTRATISTA_APP){localStorage.removeItem('pms_usuario');vcLoginPantalla();}try{vcAplicar();dibujar();}catch(e){}}
+(function(){if(DATA!=='Campo')return;
+ // cuando terminan de llegar los datos (contratos, usuarios), la vista contratista se vuelve a armar: así ya no dice «sin contrato activo»
+ const _init=initDatos;initDatos=function(){_init();setTimeout(()=>{try{const lm=$('vcloginmsg');if(lm&&/Cargando/.test(lm.textContent))lm.textContent='';if(window.CONTRATISTA_APP){const u=vcUsuarioCorreo(localStorage.getItem('pms_correo'));if(u&&u.contrato){localStorage.setItem('pms_vista_contratista','1');localStorage.setItem('pms_usuario',u.nombre);localStorage.setItem('pms_contrato',u.contrato);const lg=$('vclogin');if(lg)lg.remove();}else{localStorage.removeItem('pms_vista_contratista');vcLoginPantalla(localStorage.getItem('pms_correo')?'Ese correo ya no está autorizado o no tiene contrato: pida al coordinador que lo revise.':'');}}
+  VC_PROG=null;vcAplicar();if(vcActiva())dibujar();}catch(e){console.error(e);}},600);};
+ // en la app de contratistas: «salir» cierra la sesión del correo (no vuelve a la app completa)
+ if(window.CONTRATISTA_APP){vcSalir=vcSalirCorreo;
+  // la memoria del navegador (localStorage) es la misma de la app de campo en github.io: aquí la vista solo vale con un correo validado
+  vcActiva=function(){try{const u=vcUsuarioCorreo(localStorage.getItem('pms_correo'));return !!(u&&u.contrato);}catch(e){return false;}};
+  setTimeout(()=>{try{if(!$('vclogin')&&!vcActiva())vcLoginPantalla();}catch(e){}},300);
+  const _vm4=verMas;verMas=function(){_vm4();const v=masCaja();if(!v)return;[...v.querySelectorAll('div[onclick]')].forEach(d=>{const o=d.getAttribute('onclick')||'';if(/vcSalir\(\)/.test(o)){d.setAttribute('onclick','vcSalirCorreo();masCerrar()');const b=d.querySelector('b');if(b)b.textContent='Cerrar sesión';const s=d.querySelector('div>div');if(s)s.textContent='salir del correo de este contratista';}});};}
+ else{      // app completa: entrada por correo desde ☰ Más (para probar lo que ve cada contratista)
+  const _vm5=verMas;verMas=function(){_vm5();if(vcActiva())return;const v=masCaja();const it=v&&[...v.querySelectorAll('div[onclick]')].find(d=>/vcEntrar\(\)/.test(d.getAttribute('onclick')||''));
+   if(it)it.insertAdjacentHTML('afterend',`<div onclick="masCerrar();vcLoginPantalla()" style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:8px;padding:9px 10px;margin:5px 0;cursor:pointer"><span style="font-size:22px">✉️</span><div style="flex:1"><b style="font-size:13px">Entrar como contratista (correo)</b><div style="font-size:11px;color:#666">lo que ve el contratista cuyo correo está registrado en el PC</div></div><span style="color:#999">›</span></div>`);};}
+})();
+
 </script></body></html>
