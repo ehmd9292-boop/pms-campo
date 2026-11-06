@@ -2344,4 +2344,64 @@ vcDibujar=function(){vcContratoAuto();try{capa.clearLayers();}catch(e){}try{capa
  const _bfs=bitacoraFrenteSel;bitacoraFrenteSel=function(q){_bfs(q);[['bfcz','Calzada…'],['bfca','Carril…']].forEach(([id,tx])=>{const s=$(id);if(s&&s.options.length&&s.options[0].value==='')s.options[0].textContent=tx;});};
 })();
 
+// ================= v232 (Erix, 6-nov-2026, 18:29): observaciones de la vista contratista.
+// Bitácora: quien registra es el contratista (fijo), calzada Izquierda/Derecha y carril Interno/Externo con los nombres del sistema,
+// hora de inicio y de fin en celdas aparte, «otro tramo intervenido hoy», sin las casillas de participantes (en la vista contratista).
+// Registro de obra del contratista: sin intervenciones/daños/drenaje/señales, usuario y contrato fijos, «Agregar otra actividad».
+// ☰ Más del contratista: solo Guardar sin conexión y Salir; «Registrar obra» queda como botón en la barra.
+function vcValoresSistema(campo){const s=new Set();Object.keys(FICHA).forEach(k=>{const v=(FICHA[k]||{})[campo];if(v)s.add(String(v));});const o=[...s];const pref=campo=='cz'?['Izquierda','Derecha','Única']:['Interno','Externo'];return pref.filter(p=>o.includes(p)).concat(o.filter(x=>!pref.includes(x)).sort());}
+let BF_N=1;
+function bitacoraFrenteTxt(){const v=id=>$(id)?String($(id).value).trim():'';const uno=(t,cz,ca,p1,p2)=>((t?'Trayecto '+t:'')+(cz?' · '+cz:'')+(ca?' '+ca:'')+(p1?' · PR '+p1:'')+(p2?' a '+p2:'')).trim();
+ const partes=[uno(v('bft'),v('bfcz'),v('bfca'),v('bfp1'),v('bfp2'))];for(let n=2;n<=BF_N;n++){const s=uno(v('bft_'+n),v('bfcz_'+n),v('bfca_'+n),v('bfp1_'+n),v('bfp2_'+n));if(s)partes.push(s);}
+ const s=partes.filter(Boolean).join(' | ');if($('bfrente'))$('bfrente').value=s;if($('bhoras')&&($('bhi')||$('bhf')))$('bhoras').value=((v('bhi')||'')+(v('bhf')?' – '+v('bhf'):'')).trim();return s;}
+function bitacoraFrenteSel(q,n){const sfx=n&&n>1?'_'+n:'';const v=id=>$(id)?String($(id).value):'';const cz=vcValoresSistema('cz'),ca=vcValoresSistema('car');const op=(arr,sel,tx)=>`<option value="">${tx}</option>`+arr.map(x=>`<option value="${x}"${x==sel?' selected':''}>${x}</option>`).join('');
+ if(q=='t'){/* la calzada y el carril son los mismos nombres en toda la vía: no dependen del trayecto */}bitacoraFrenteTxt();}
+function bitacoraFrenteFila(n,t,cz,ca,p1){const sfx=n>1?'_'+n:'';const op=(arr,sel,tx)=>`<option value="">${tx}</option>`+arr.map(x=>`<option value="${x}"${x==sel?' selected':''}>${x}</option>`).join('');
+ const ts=Object.keys(destIdx()).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+ return `<div class="bfx" data-n="${n}" style="border-top:${n>1?'1px dashed #bbb':'0'};margin-top:${n>1?'6px':'0'};padding-top:${n>1?'4px':'0'}">${n>1?`<div style="font-size:11px;color:#555">Tramo ${n} intervenido hoy <span onclick="this.closest('.bfx').remove();bitacoraFrenteTxt()" style="color:#b71c1c;cursor:pointer;float:right">✕ quitar</span></div>`:''}
+ <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select id="bft${sfx}" onchange="bitacoraFrenteSel('t',${n})" style="flex:1;min-width:90px">${op(ts,t,'Trayecto…')}</select><select id="bfcz${sfx}" onchange="bitacoraFrenteTxt()" style="flex:1;min-width:90px">${op(vcValoresSistema('cz'),cz,'Calzada…')}</select><select id="bfca${sfx}" onchange="bitacoraFrenteTxt()" style="flex:1;min-width:90px">${op(vcValoresSistema('car'),ca,'Carril…')}</select></div>
+ <div style="display:flex;gap:6px;align-items:center;margin-top:4px;font-size:12px">PR inicio <input id="bfp1${sfx}" value="${p1||''}" placeholder="15+000" style="width:78px" oninput="bitacoraFrenteTxt()"> <button type="button" onclick="bitacoraFrenteGps('i',${n})" title="tomar del GPS">📍</button> PR fin <input id="bfp2${sfx}" placeholder="15+900" style="width:78px" oninput="bitacoraFrenteTxt()"> <button type="button" onclick="bitacoraFrenteGps('f',${n})" title="tomar del GPS">📍</button></div></div>`;}
+function bitacoraFrenteMas(){BF_N++;const box=$('bfrentes');if(!box)return;box.insertAdjacentHTML('beforeend',bitacoraFrenteFila(BF_N,'','','',''));bitacoraFrenteTxt();}
+function bitacoraFrenteGps(cual,n){const sfx=n&&n>1?'_'+n:'';if(!ultimaPos){alert('Active primero 📍 Mi ubicación y espere la posición.');return;}const sc=seccionCercana(ultimaPos);if(!sc||!FICHA[sc.cod]){alert('No encontré una sección de la vía cerca.');return;}const f=FICHA[sc.cod];
+ if($('bft'+sfx))$('bft'+sfx).value=f.t;if($('bfcz'+sfx))$('bfcz'+sfx).value=f.cz;if($('bfca'+sfx))$('bfca'+sfx).value=f.car;
+ const pr=prTxt(sc.pr!=null?Math.round(sc.pr):(f.pri||0));if(cual=='f'){if($('bfp2'+sfx))$('bfp2'+sfx).value=pr;}else{if($('bfp1'+sfx))$('bfp1'+sfx).value=pr;}bitacoraFrenteTxt();}
+(function(){if(DATA!=='Campo')return;
+ // --- bitácora: se arma sobre el formulario original (v226) y se reemplaza el frente (v229) por el de varias filas
+ const _bitAbrir7=bitacoraAbrir;bitacoraAbrir=function(pre){_bitAbrir7(pre);BF_N=1;const inp=$('bfrente');if(!inp)return;
+  // quitar la fila de frente de la v229 (los dos div antes del input) y poner la caja de frentes
+  let t='',cz='',ca='',pr='';try{const sc=ultimaPos?seccionCercana(ultimaPos):null;if(sc&&FICHA[sc.cod]){const f=FICHA[sc.cod];t=f.t;cz=f.cz;ca=f.car;pr=prTxt(sc.pr!=null?Math.round(sc.pr):(f.pri||0));}}catch(e){}
+  if($('bft')){const p=inp.previousElementSibling,pp=p&&p.previousElementSibling;if(p)p.remove();if(pp)pp.remove();}
+  inp.insertAdjacentHTML('beforebegin',`<div id="bfrentes">${bitacoraFrenteFila(1,t,cz,ca,pr)}</div><div style="margin:4px 0"><button type="button" onclick="bitacoraFrenteMas()" style="border:1px solid #ef6c00;color:#ef6c00;background:#fff;border-radius:6px;padding:4px 9px;font-size:12px">➕ Otro tramo intervenido hoy</button></div>`);
+  inp.type='hidden';
+  // hora de inicio y de fin en celdas aparte
+  const bh=$('bhoras');if(bh){const col=bh.parentElement.parentElement;bh.type='hidden';col.style.display='none';col.parentElement.insertAdjacentHTML('afterend',`<div style="display:flex;gap:6px;margin-top:6px"><div style="flex:1"><div style="font-size:11px;color:#555">Hora de inicio</div><input id="bhi" type="time" style="width:100%" onchange="bitacoraFrenteTxt()"></div><div style="flex:1"><div style="font-size:11px;color:#555">Hora de fin</div><input id="bhf" type="time" style="width:100%" onchange="bitacoraFrenteTxt()"></div></div>`);}
+  try{const lf=inp.previousElementSibling;}catch(e){}
+  [...document.querySelectorAll('#masbox div')].forEach(d=>{if(d.children.length==0&&/^Frente de trabajo/.test(d.textContent))d.textContent='Frente de trabajo (trayecto, calzada, carril, PR)';});
+  if(vcActiva()){      // quien registra = el contratista (fijo); sin casillas de participantes
+   const u=localStorage.getItem('pms_usuario')||'';const s=$('busr');if(s){if(u&&![...s.options].some(o=>o.value==u))s.insertAdjacentHTML('beforeend',`<option value="${u}" selected>${u}</option>`);s.value=u;s.style.display='none';s.insertAdjacentHTML('afterend',`<div style="font-weight:bold;font-size:13px;padding:4px 0">${u||'(sin usuario)'}</div>`);const lab=s.parentElement.querySelector('div');if(lab)lab.textContent='Quien registra (contratista)';}
+   const bc=$('bctr');if(bc){bc.style.display='none';bc.insertAdjacentHTML('afterend',`<div style="font-size:13px;padding:4px 0">${bc.value||'—'}</div>`);}
+   const bp=$('bparts');if(bp){bp.parentElement.style.display='none';}
+  }
+  bitacoraFrenteTxt();};
+ // --- registro de obra del contratista: solo el formulario, sin las secciones de consulta
+ const _campoHtml7=campoHtml;campoHtml=function(cod){let h=_campoHtml7(cod);if(!vcActiva())return h;
+  try{const d=document.createElement('div');d.innerHTML=h;const dets=[...d.children].filter(x=>x.tagName=='DETAILS');const ult=dets[dets.length-1];dets.forEach(x=>{if(x!==ult)x.remove();});
+   if(ult){const sm=ult.querySelector('summary');if(sm)sm.remove();const w=document.createElement('div');w.style.marginTop='6px';while(ult.firstChild)w.appendChild(ult.firstChild);ult.replaceWith(w);}
+   // tipo: solo obra ejecutada y nota; usuario y contrato fijos; sin costo real ni calidad de construcción
+   const ct=d.querySelector('#ctipo');if(ct){[...ct.options].forEach(o=>{if(o.value!='obra'&&o.value!='nota')o.remove();});}
+   const cu=d.querySelector('#cusr');if(cu){cu.style.display='none';cu.insertAdjacentHTML('afterend',`<b>${localStorage.getItem('pms_usuario')||''}</b>`);}
+   const cw=d.querySelector('#ccontrw');if(cw)cw.style.display='none';
+   const cc=d.querySelector('#ccosto');if(cc){const p=cc.parentElement;let n=cc.previousSibling;while(n&&!(n.nodeType==3&&/Costo real/.test(n.textContent)))n=n.previousSibling;if(n)n.textContent=n.textContent.replace(/Costo real total\s*$/,'');cc.style.display='none';const sp=cc.nextElementSibling;if(sp&&sp.tagName=='SPAN')sp.remove();}
+   const cal=d.querySelector('#ccalw');if(cal)cal.remove();
+   const bt=[...d.querySelectorAll('button')].find(b=>/Agregar esta caja/.test(b.textContent));if(bt){bt.textContent='➕ Agregar otra actividad (mismo tramo)';const sp=bt.nextElementSibling;if(sp&&sp.tagName=='SPAN')sp.remove();}
+   h=d.innerHTML;}catch(e){console.error(e);}return h;};
+ // --- ☰ Más del contratista: solo salir y guardar sin conexión; «Registrar obra» como botón en la barra
+ const _vm7=verMas;verMas=function(){if(!vcActiva())return _vm7();vcContratoAuto();const c=vcContrato()||{};const it=(ico,tit,sub,fn)=>`<div onclick="${fn}" style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:8px;padding:9px 10px;margin:5px 0;cursor:pointer"><span style="font-size:22px">${ico}</span><div style="flex:1"><b style="font-size:13px">${tit}</b><div style="font-size:11px;color:#666">${sub}</div></div><span style="color:#999">›</span></div>`;
+  const salir=window.CONTRATISTA_APP?it('🚪','Cerrar sesión','salir del correo de este contratista','vcSalirCorreo();masCerrar()'):it('🚪','Salir de la vista contratista','volver a la app completa','vcSalir();masCerrar()');
+  masPanel('☰ Más · contratista',`<div style="background:#ef6c00;color:#fff;border-radius:8px;padding:8px 10px;margin:4px 0 8px"><b style="font-size:13px">${c.contratista||'Contratista'}</b><div style="font-size:11px;opacity:.95">${c.contrato||'sin contrato activo'}</div></div>`+it('⬇','Guardar sin conexión','el mapa y los datos para trabajar sin señal','masCerrar();descargarOffline()')+salir);};
+ window.vcRegistrarObra=function(){try{if(ultimaPos){const sc=seccionCercana(ultimaPos);if(sc&&FICHA[sc.cod]){ficha(sc.cod,true);return;}}if(typeof watch!=='undefined'&&watch==null)gps();alert('Buscando su ubicación… en unos segundos toque de nuevo «📝 Registrar obra», o toque directamente el tramo en el mapa.');}catch(e){alert('Toque el tramo en el mapa para registrar la obra.');}};
+ const fila=document.querySelector('.gps .fila');if(fila&&!$('bregobra'))fila.insertAdjacentHTML('beforeend',' <button id="bregobra" onclick="vcRegistrarObra()" style="display:none;background:#2e7d32;color:#fff;border-color:#2e7d32" title="registrar la obra ejecutada en el tramo donde está">📝 Registrar obra</button>');
+ const _va7=vcAplicar;vcAplicar=function(){_va7();const on=vcActiva();const b=$('bregobra');if(b)b.style.display=on?'':'none';};
+})();
+
 </script></body></html>
