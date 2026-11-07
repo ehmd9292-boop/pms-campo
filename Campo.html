@@ -2404,4 +2404,63 @@ function bitacoraFrenteGps(cual,n){const sfx=n&&n>1?'_'+n:'';if(!ultimaPos){aler
  const _va7=vcAplicar;vcAplicar=function(){_va7();const on=vcActiva();const b=$('bregobra');if(b)b.style.display=on?'':'none';};
 })();
 
+// ================= v233 (Erix, 6-nov-2026, 19:27): contrato de PARCHEO Y BACHEO con MDC (CTO 2026-51 Castro Tcherassi).
+// Los sitios salen del plan del PMS: tramos con parcheo (m³) y con fresado + reposición (m² × espesor). De cada tramo se derivan las
+// cantidades de los ítems del contrato: fresado m³ = mezcla m³ = volumen; riego de liga m² = área; transportes m³-km en la proporción de la
+// oferta (m³-km por m³); la cama baja es un costo fijo del contrato (se cobra una vez). Entran los tramos más urgentes hasta la cantidad
+// contratada de mezcla y el dinero del contrato. Un contrato con microfresado/slurry/sello sigue usando la lógica de la v231.
+let VC_ESP_M=0;      // espesor (m) de la capa que se fresa y repone. 0 = se deduce de la oferta (m³ de mezcla ÷ m² de riego de liga); si no hay riego, 0.05 m.
+function vcEsMezcla(c){const its=(c&&c.items||[]);return !its.some(i=>VC_Q[i.actividad]&&/Microfresado|Slurry|Sello/.test(i.actividad))&&its.some(i=>/parcheo|mdc|mezcla|bacheo|fresado/i.test(i.actividad));}
+function vcItemRol(i){const a=String(i.actividad||'').toLowerCase(),u=String(i.unidad||'').toLowerCase();
+ if(/cama ?baja|equipos/.test(a)&&/mes/.test(u))return 'fijo';if(/transporte/.test(a)&&/fresad/.test(a))return 'tr_fres';if(/transporte/.test(a))return 'tr_mez';
+ if(/riego|liga|imprim/.test(a))return 'area';if(/fresad/.test(a))return 'vol';if(/parcheo|mdc|mezcla|bacheo|concreto asf/.test(a))return 'vol';return '';}
+const _vcProg7=vcPrograma;vcPrograma=function(){vcContratoAuto();const c=vcContrato();if(!c)return [];if(!vcEsMezcla(c))return _vcProg7();
+ const key='v233|'+VC_ESP_M+'|'+c.contrato+'|'+Object.keys(DATOS).join(',')+'|'+(c.items||[]).length;if(VC_PROG&&VC_PROG_K==key)return VC_PROG;
+ const esc=DATOS['Base BC']?'Base BC':Object.keys(DATOS)[0];if(!esc)return [];const anios=Object.keys(DATOS[esc]).map(Number).sort((a,b)=>a-b);
+ const aiu=c.aiu||{};const fa=1+((+aiu.A_pct||0)+(+aiu.I_pct||0)+(+aiu.U_pct||0))/100+((+aiu.U_pct||0)/100)*((+aiu.IVA_sobre_U_pct||0)/100);
+ const valor=+c.valor||0;const nsem=Math.max(1,Math.round((+c.plazo_meses||4)*4.33));
+ const items=(c.items||[]).map(i=>Object.assign({rol:vcItemRol(i),pu:+i.precio||0,cap:+i.cantidad||0,un:i.unidad||''},i)).filter(i=>i.rol&&i.pu>0);
+ const iMez=items.find(i=>i.rol=='vol'&&/parcheo|mdc|mezcla|bacheo|concreto/i.test(i.actividad))||items.find(i=>i.rol=='vol');const iFre=items.find(i=>i.rol=='vol'&&/fresad/i.test(i.actividad)&&i!==iMez);
+ const iRie=items.find(i=>i.rol=='area');const ESP=VC_ESP_M>0?VC_ESP_M:((iMez&&iMez.cap&&iRie&&iRie.cap)?iMez.cap/iRie.cap:0.05);
+ const capVol=iMez?iMez.cap:0;const kTr={};items.forEach(i=>{if(i.rol=='tr_fres')kTr[i.actividad]=(iFre&&iFre.cap)?i.cap/iFre.cap:0;if(i.rol=='tr_mez')kTr[i.actividad]=(iMez&&iMez.cap)?i.cap/iMez.cap:0;});
+ let fijo=0;items.filter(i=>i.rol=='fijo').forEach(i=>{fijo+=i.cap*i.pu*fa;});
+ const vistos=new Set();const tramos=[];const cc_=cod=>vcCzCar(cod);
+ anios.forEach(a=>{(DATOS[esc][a]||[]).forEach(f=>{if(vistos.has(f[0]))return;if(f[19]=='none'||f[1]=='none'||f[1]=='excl')return;const P=+f[23]||0,F=+f[27]||0;const vol=P+F*ESP;if(vol<=0.05)return;vistos.add(f[0]);
+  const area=P/ESP+F;const acts=[];items.forEach(i=>{let q=0;if(i.rol=='vol')q=vol;else if(i.rol=='area')q=area;else if(i.rol=='tr_fres'||i.rol=='tr_mez')q=vol*(kTr[i.actividad]||0);else return;if(q>0)acts.push({act:i.actividad,q:q,un:i.un,costo:q*i.pu*fa});});
+  const cc=cc_(f[0]);tramos.push({cod:f[0],t:f[18],cz:cc[0],car:cc[1],pri:+f[6]||99,rango:+f[15]||0,anio:a,L:f[17],desc:f[5]||'',acts:acts,vol:vol,area:area,costo:acts.reduce((s,x)=>s+x.costo,0),fase:F>0?1:2,k:F>0?'fresado':'parcheo'});});});
+ const porUrg=(x,y)=>x.anio-y.anio||x.pri-y.pri||x.rango-y.rango||y.vol-x.vol;const prN=c_=>{const m=/Pr (\d+)/.exec(String(c_));return m?+m[1]:0;};const tN=t_=>parseFloat(String(t_).replace(/[^\d.]/g,''))||0;
+ const porVia=(x,y)=>tN(x.t)-tN(y.t)||String(x.t).localeCompare(String(y.t))||String(x.cz).localeCompare(String(y.cz))||String(x.car).localeCompare(String(y.car))||prN(x.cod)-prN(y.cod);
+ const usado={};let gasto=fijo;let volU=0;const prog=[];
+ tramos.sort(porUrg).forEach(tr=>{if(capVol&&volU+tr.vol>capVol*1.02)return;if(valor&&gasto+tr.costo>valor)return;gasto+=tr.costo;volU+=tr.vol;tr.acts.forEach(x=>{usado[x.act]=(usado[x.act]||0)+x.q;});prog.push(tr);});
+ items.filter(i=>i.rol=='fijo').forEach(i=>{usado[i.actividad]=i.cap;});
+ prog.sort(porVia);let acum=fijo;prog.forEach(r=>{acum+=r.costo;r.acum=acum;r.sem=valor?Math.min(nsem,Math.max(1,Math.ceil(acum/valor*nsem))):1;
+  r.acts.forEach(x=>{const f=FICHA[r.cod]||{};const h=(f.hist||[]).some(z=>String(z[1]).toLowerCase()==x.act.toLowerCase());const p=registros().some(z=>z.codigo==r.cod&&z.tipo=='obra'&&String(z.actividad||'').toLowerCase()==x.act.toLowerCase());x.hecho=h||p;});
+  const mez=r.acts.find(x=>x.act==(iMez||{}).actividad);r.hecho=mez?!!mez.hecho:r.acts.every(x=>x.hecho);});
+ const its={};items.forEach(i=>{its[i.actividad]={pu:i.pu,cap:i.cap,un:i.un};});
+ prog.usado=usado;prog.items=its;prog.gasto=gasto;prog.fijo=fijo;prog.fa=fa;prog.mezcla=true;prog.volU=volU;prog.esp=ESP;VC_PROG=prog;VC_PROG_K=key;return prog;};
+VC_FASE[1]=VC_FASE[1];      // (sin cambio para micro/slurry/sello)
+const VC_FASE_MEZ={1:'fresado + reposición MDC',2:'parcheo y bacheo MDC'};
+const _vcListado7=vcListado;vcListado=function(){vcContratoAuto();const c=vcContrato();if(!c||!vcEsMezcla(c))return _vcListado7();const prog=vcPrograma();const sel=prog.filter(vcPasaFiltro);
+ const tot=prog.gasto||0;const hechos=prog.filter(r=>r.hecho).length;const it=prog.items||{},u=prog.usado||{};
+ const cant=Object.keys(it).map(a=>{const cap=it[a].cap,q=u[a]||0;return `${a}: <b>${fmt(q,0)}</b> ${it[a].un}${cap?' de '+fmt(cap,0)+(q>cap*1.02?' <span style="color:#b26a00">(se pasa)</span>':''):''}`;}).join('<br>');
+ let h=`<div style="background:#ef6c00;color:#fff;border-radius:8px;padding:8px 10px;margin:4px 0 8px"><b style="font-size:13px">${c.contratista||''} · ${c.contrato}</b><div style="font-size:11px;opacity:.95">${prog.length} sitios de parcheo · ${cop(tot)} de ${cop(+c.valor||0)} (con AIU e IVA${prog.fijo?', incluye cama baja '+cop(prog.fijo):''}) · ${hechos} ya registrados</div></div>
+ <div style="background:#fff;border-radius:8px;padding:6px 10px;margin:4px 0;font-size:12px"><b>Cantidades que resultan</b><br>${cant}</div>
+ <div style="font-size:11px;color:#666;margin:2px 0 4px">Sitios del plan del PMS con parcheo (m³) y con fresado + reposición (m² × ${(prog.esp*100).toFixed(1)} cm, espesor deducido de la oferta: mezcla ÷ riego de liga), los más urgentes primero, hasta la mezcla contratada y el dinero. Riego y transportes se derivan del volumen. Orden por trayecto, calzada, carril y PR. Toque un sitio para abrir su ficha y registrar.</div>`+vcFiltroHtml(prog,'lista');
+ const porT={};sel.forEach(r=>{(porT[r.t]=porT[r.t]||[]).push(r);});const tN=t_=>parseFloat(String(t_).replace(/[^\d.]/g,''))||0;
+ h+=`<div style="font-size:11px;color:#444;margin:2px 0">${sel.length} sitio(s) en la lista · ${cop(sel.reduce((s,r)=>s+r.costo,0))} · ${fmt(sel.reduce((s,r)=>s+r.vol,0),1)} m³ de mezcla</div>`;
+ Object.keys(porT).sort((a,b)=>tN(a)-tN(b)||a.localeCompare(b)).forEach(t=>{const rs=porT[t];const cs=rs.reduce((x,r)=>x+r.costo,0);h+=`<div style="background:#fff;border-radius:8px;padding:6px 10px;margin:5px 0"><b style="font-size:13px">Trayecto ${t}</b> <span style="font-size:11px;color:#666">· ${rs.length} sitio(s) · ${fmt(rs.reduce((s,r)=>s+r.vol,0),1)} m³ · ${cop(cs)}</span>`+
+  rs.map(r=>`<div onclick="masCerrar();ficha('${r.cod}',true)" style="display:flex;gap:8px;align-items:center;border-top:1px solid #eee;padding:4px 0;cursor:pointer;${r.hecho?'opacity:.55':''}"><span style="width:10px;height:10px;border-radius:5px;background:${(COL[r.k]||['#FF8A65'])[0]};flex:none"></span><div style="flex:1;font-size:12px"><b>${r.cz}${r.car?' · '+r.car:''} · PR ${prTxt((FICHA[r.cod]||{}).pri||0)}</b> · ${r.L} m <span style="color:#666">(${VC_FASE_MEZ[r.fase]})</span><div style="font-size:11px;color:#444">Mezcla MDC <b>${fmt(r.vol,1)} m³</b> · fresado ${fmt(r.vol,1)} m³ · riego ${fmt(r.area,0)} m²${r.hecho?' · ✓ registrado':''}</div></div><span style="font-size:11px;color:#444;white-space:nowrap">${cop(r.costo)}</span></div>`).join('')+`</div>`;});
+ if(!sel.length)h+='<div style="padding:14px;color:#666;text-align:center">Ningún sitio cumple el filtro.</div>';
+ masPanel('📋 Sitios de parcheo',h);};
+vcProgramacion=vcListado;
+const _vcFiltroHtml7=vcFiltroHtml;vcFiltroHtml=function(prog,idp){let h=_vcFiltroHtml7(prog,idp);if(prog&&prog.mezcla){h=h.replace('<option value="micro">Microfresado + sello + slurry</option><option value="slurry">Slurry seal (+ sello)</option><option value="sello">Solo sello de fisuras</option>',`<option value="fresado"${VC_FILTRO.k=='fresado'?' selected':''}>Fresado + reposición MDC</option><option value="parcheo"${VC_FILTRO.k=='parcheo'?' selected':''}>Parcheo y bacheo MDC</option>`);}return h;};
+const _vcDibujar7=vcDibujar;vcDibujar=function(){_vcDibujar7();try{const c=vcContrato();const prog=c?vcPrograma():[];if(!prog.mezcla)return;const sel=prog.filter(vcPasaFiltro);
+ // tooltips y convenciones propios del parcheo
+ capa.eachLayer(ln=>{});const lg=$('leg');if(lg)lg.innerHTML='<b>Mis sitios de parcheo</b><div id="vcfilmapa">'+vcFiltroHtml(prog,'mapa')+'</div><div><i style="background:'+(COL.fresado||['#8E24AA'])[0]+'"></i>fresado + reposición MDC</div><div><i style="background:'+(COL.parcheo||['#FF8A65'])[0]+'"></i>parcheo y bacheo MDC</div><div><i style="background:#bbb;opacity:.5"></i>punteado: ya registrado</div><div style="margin-top:4px;color:#666">Toque un sitio para registrar la obra.</div>';
+ const k=$('kpi');if(k)k.innerHTML=`Sitios del contrato ${c.contrato}: ${sel.length}${sel.length!=prog.length?' de '+prog.length:''} · ${fmt(sel.reduce((s,r)=>s+r.vol,0),0)} m³ · ${cop(sel.reduce((s,r)=>s+r.costo,0)+(sel.length==prog.length?prog.fijo||0:0))}${sel.length!=prog.length?'':' de '+cop(+c.valor||0)}`;}catch(e){}};
+(function(){if(DATA!=='Campo')return;
+ const _vm8=verMas;verMas=function(){_vm8();try{const c=vcContrato();if(!vcActiva()||!c||!vcEsMezcla(c))return;const v=masCaja();[...v.querySelectorAll('div[onclick]')].forEach(d=>{if(/vcProgramacion\(\)/.test(d.getAttribute('onclick')||'')){const bb=d.querySelector('b');if(bb)bb.textContent='Sitios de parcheo';}});}catch(e){}};
+ const _va8=vcAplicar;vcAplicar=function(){_va8();try{const b=$('bprog');const c=vcContrato();if(b&&c)b.textContent=vcEsMezcla(c)?'📋 Sitios':'📋 Tramos';}catch(e){}};
+})();
+
 </script></body></html>
