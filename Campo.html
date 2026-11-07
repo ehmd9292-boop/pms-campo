@@ -2464,4 +2464,17 @@ const _vcDibujar7=vcDibujar;vcDibujar=function(){_vcDibujar7();try{const c=vcCon
  const _va8=vcAplicar;vcAplicar=function(){_va8();try{const b=$('bprog');const c=vcContrato();if(b&&c)b.textContent=vcEsMezcla(c)?'📋 Sitios':'📋 Tramos';}catch(e){}};
 })();
 
+// ================= v233c (Erix, 20:27): en cada sitio de parcheo se muestran el LARGO, el ANCHO y el ESPESOR que se están calculando
+// (área = mezcla ÷ espesor; largo = el del tramo; ancho = área ÷ largo; 3,65 m = un carril).
+let VC_ANCHO_CARRIL=3.65;
+function vcDims(r,esp){const area=r.area||(r.vol/esp);const L=+r.L||100;const ancho=area/L;return {area:area,largo:L,ancho:ancho,esp:esp,carriles:ancho/VC_ANCHO_CARRIL};}
+function vcDimsTxt(r,esp){const d=vcDims(r,esp);return `largo <b>${fmt(d.largo,1)} m</b> × ancho <b>${fmt(d.ancho,2)} m</b> × espesor <b>${fmt(d.esp*100,1)} cm</b> = ${fmt(d.area,1)} m² · <b>${fmt(r.vol,2)} m³</b>${d.carriles>1.05?' <span style="color:#b26a00">(más de un carril: '+fmt(d.carriles,1)+' carriles)</span>':''}`;}
+const _vcListado8=vcListado;vcListado=function(){_vcListado8();try{const c=vcContrato();const prog=c?vcPrograma():[];if(!prog.mezcla)return;const v=masCaja();if(!v)return;const esp=prog.esp||0.05;const by={};prog.forEach(r=>{by[r.cod]=r;});
+ [...v.querySelectorAll('div[onclick^="masCerrar();ficha("]')].forEach(d=>{const m=/ficha\('([^']+)'/.exec(d.getAttribute('onclick'));const r=m&&by[m[1]];if(!r)return;const sub=d.querySelector('div[style*="flex:1"] > div');if(sub)sub.innerHTML=vcDimsTxt(r,esp)+(r.hecho?' · ✓ registrado':'')+`<div style="color:#777">fresado ${fmt(r.vol,2)} m³ · riego de liga ${fmt(r.area,1)} m²</div>`;});
+ const cab=v.querySelector('div[style*="font-size:11px;color:#666;margin:2px 0 4px"]');if(cab)cab.insertAdjacentHTML('beforeend',` El largo es el del tramo y el ancho = área ÷ largo (${VC_ANCHO_CARRIL} m = un carril completo; si da más, el daño cubre más de un carril). Son medidas estimadas del plan: en campo se registran las reales.`);}catch(e){console.error(e);}};
+const _vcDibujar8=vcDibujar;vcDibujar=function(){_vcDibujar8();try{const c=vcContrato();const prog=c?vcPrograma():[];if(!prog.mezcla)return;const esp=prog.esp||0.05;const by={};prog.forEach(r=>{by[r.cod]=r;});
+ capa.eachLayer(ln=>{const tt=ln.getTooltip&&ln.getTooltip();if(!tt)return;const txt=tt.getContent();const m=/<b>Trayecto ([^·<]+) · ([^·<]+) · ([^·<]*) · PR ([\d+]+)<\/b>/.exec(String(txt));if(!m)return;
+  const r=Object.values(by).find(x=>String(x.t)==m[1].trim()&&prTxt((FICHA[x.cod]||{}).pri||0)==m[4]&&String(x.cz)==m[2].trim());if(!r)return;ln.setTooltipContent(`<b>Trayecto ${r.t} · ${r.cz}${r.car?' · '+r.car:''} · PR ${prTxt((FICHA[r.cod]||{}).pri||0)}</b><br>${vcDimsTxt(r,esp)}<br>riego de liga ${fmt(r.area,1)} m²${r.hecho?' · ✓ registrado':''}<br><i>toque para registrar la obra</i>`);});}catch(e){}};
+const _vcFicha8=vcFicha;vcFicha=function(cod,abrir){_vcFicha8(cod,abrir);try{const c=vcContrato();const prog=c?vcPrograma():[];if(!prog.mezcla)return;const r=prog.find(x=>x.cod==cod);if(!r)return;const box=$('ficha');const blk=box&&box.querySelector('div[style*="fff8e1"]');if(blk)blk.insertAdjacentHTML('beforeend',`<div style="margin-top:3px;border-top:1px dashed #e0c28a;padding-top:3px">Medidas estimadas: ${vcDimsTxt(r,prog.esp||0.05)}</div>`);}catch(e){}};
+
 </script></body></html>
