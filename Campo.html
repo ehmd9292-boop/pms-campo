@@ -2571,4 +2571,45 @@ function acLogin(msg){if(window.CONTRATISTA_APP)return vcLoginPantalla(msg);if($
  const _vs11=vcSalir;vcSalir=function(){try{const u=acSesionValida();if(u&&String(u.rol||'').toLowerCase()=='contratista'&&u.correo){acCerrarSesion();return;}}catch(e){}_vs11();};
 })();
 
+// ================= v237 (Erix, 9-nov-2026, 13:56): clave INICIAL + creación obligatoria de clave propia con validador de seguridad.
+// BTS entrega una clave inicial. Al entrar con ella por primera vez, la app exige crear una clave propia: mínimo 8 caracteres, una mayúscula,
+// una minúscula, un número y un símbolo; el botón «Guardar» solo se activa cuando la clave cumple todo. Se guarda la huella en el celular
+// (pms_claves_local) y se manda al PC como registro «clave» (solo la huella); al publicar la app rige en todos los celulares.
+function acReglas(c){c=String(c||'');return [['Al menos 8 caracteres',c.length>=8],['Una letra mayúscula',/[A-ZÁÉÍÓÚÑ]/.test(c)],['Una letra minúscula',/[a-záéíóúñ]/.test(c)],['Un número',/\d/.test(c)],['Un símbolo (por ejemplo . , - _ ! ? # $ % & * @)',/[^A-Za-z0-9ÁÉÍÓÚÑáéíóúñ\s]/.test(c)],['Sin espacios',!/\s/.test(c)],['Que no sea muy común',!/^(12345678|password|contrase|clave123|qwerty|abcd1234)/i.test(c)]];}
+function acClaveFuerte(c){return acReglas(c).every(r=>r[1]);}
+function acLocales(){try{return JSON.parse(localStorage.getItem('pms_claves_local')||'{}');}catch(e){return {};}}
+function acHashVigente(u){const L=acLocales()[u.correo];if(L&&L.base==u.clave_hash&&L.nueva)return {hash:L.nueva,inicial:false};return {hash:u.clave_hash||'',inicial:!!u.clave_inicial};}
+// vale la sesión si coincide con la huella vigente (propia creada en este celular, o la publicada)
+vcSesionOk=function(u){if(!u)return false;const v=acHashVigente(u);if(!v.hash)return true;const s=localStorage.getItem('pms_sesion');return s==v.hash||s==u.clave_hash;};
+function acPedirClaveNueva(u,correo,despues){const d=document.createElement('div');d.id='vcnueva';d.style.cssText='position:fixed;inset:0;z-index:100000;background:#f0f2f5;display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto';
+ d.innerHTML=`<div style="background:#fff;border-radius:14px;padding:22px 18px;max-width:420px;width:100%;box-shadow:0 4px 18px rgba(0,0,0,.15)"><div style="font-size:20px;font-weight:bold;color:#004A61">Cree su clave</div><div style="font-size:12px;color:#666;margin:6px 0 12px">Entró con la clave inicial que le entregó BTS. Por seguridad, cree ahora su propia clave; la inicial dejará de servir.</div>
+ <input id="acn1" type="password" placeholder="clave nueva" autocomplete="new-password" style="width:100%;font-size:16px;padding:10px;border:1px solid #bbb;border-radius:8px" oninput="acValidar()">
+ <input id="acn2" type="password" placeholder="repita la clave" autocomplete="new-password" style="width:100%;font-size:16px;padding:10px;border:1px solid #bbb;border-radius:8px;margin-top:8px" oninput="acValidar()">
+ <label style="font-size:12px;color:#555;display:block;margin:6px 0"><input type="checkbox" onchange="$('acn1').type=$('acn2').type=this.checked?'text':'password'"> mostrar</label>
+ <div id="acreglas" style="font-size:12px;margin:6px 0"></div><div id="acfuerza" style="height:6px;border-radius:3px;background:#eee;margin:6px 0"><div id="acfz" style="height:6px;border-radius:3px;width:0;background:#e53935"></div></div>
+ <button id="acok" type="button" disabled style="width:100%;margin-top:10px;border:0;border-radius:8px;padding:12px;background:#9e9e9e;color:#fff;font-weight:bold;font-size:15px">Guardar mi clave</button>
+ <div onclick="acCerrarSesion();$('vcnueva').remove()" style="font-size:11px;color:#004A61;margin-top:12px;text-align:center;cursor:pointer">Cancelar y salir</div></div>`;document.body.appendChild(d);
+ $('acok').onclick=async()=>{const c=$('acn1').value;if(!acClaveFuerte(c)||c!==$('acn2').value)return;const h=await vcHash(correo+':'+c);const L=acLocales();L[correo]={base:u.clave_hash,nueva:h,fecha:new Date().toISOString().slice(0,10)};localStorage.setItem('pms_claves_local',JSON.stringify(L));localStorage.setItem('pms_sesion',h);
+  try{const r=registros();r.push({id:'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),tipo:'clave',usuario:u.nombre,correo:correo,clave_hash:h,clave_base:u.clave_hash,fecha:new Date().toISOString().slice(0,10),registrado:new Date().toISOString()});setRegistros(r);nReg();}catch(e){}
+  d.remove();alert('Clave guardada. Úsela desde ahora para entrar. Se envía al PC con sus registros («📝 Campo: por enviar») para que valga también en otros celulares.');if(despues)despues();};}
+function acValidar(){const c=$('acn1')?$('acn1').value:'';const R=acReglas(c);const ok=R.every(r=>r[1])&&c===$('acn2').value;const n=R.filter(r=>r[1]).length;
+ $('acreglas').innerHTML=R.map(r=>`<div style="color:${r[1]?'#2e7d32':'#b71c1c'}">${r[1]?'✓':'•'} ${r[0]}</div>`).join('')+`<div style="color:${c&&c===$('acn2').value?'#2e7d32':'#b71c1c'}">${c&&c===$('acn2').value?'✓':'•'} Las dos claves coinciden</div>`;
+ $('acfz').style.width=Math.round(n/R.length*100)+'%';$('acfz').style.background=n<=3?'#e53935':(n<R.length?'#fb8c00':'#2e7d32');const b=$('acok');b.disabled=!ok;b.style.background=ok?'#2e7d32':'#9e9e9e';}
+// la entrada (acEntrar / vcEntrarClave) compara contra la huella vigente y, si fue con la clave inicial, pide crear la propia
+const _acEntrar12=acEntrar;acEntrar=async function(correo,clave){correo=String(correo||'').trim().toLowerCase();clave=String(clave||'').trim();const u=vcUsuarioCorreo(correo);const msg=t=>{const m=$('vcloginmsg');if(m)m.textContent=t;else alert(t);};
+ if(!u){msg('Ese correo no está autorizado. Pida al coordinador de BTS que lo registre en Contratos → Usuarios y cuadrillas.');return false;}
+ const v=acHashVigente(u);let conInicial=false;
+ if(v.hash){if(!clave){msg('Escriba su clave.');return false;}const h=await vcHash(correo+':'+clave);if(h===v.hash){localStorage.setItem('pms_sesion',h);conInicial=v.inicial;}else{msg('La clave no es correcta. Si la olvidó, pida a BTS que la restablezca.');return false;}}
+ else localStorage.removeItem('pms_sesion');
+ localStorage.setItem('pms_usuario',u.nombre);localStorage.setItem('pms_correo',correo);
+ if(String(u.rol||'').toLowerCase()=='contratista'){if(!u.contrato){msg('El usuario '+u.nombre+' no tiene contrato asignado en el PC.');return false;}localStorage.setItem('pms_contrato',u.contrato);if(u.contratista)localStorage.setItem('pms_contratista',u.contratista);localStorage.setItem('pms_vista_contratista','1');}
+ else{localStorage.removeItem('pms_vista_contratista');localStorage.removeItem('pms_contrato');localStorage.removeItem('pms_contratista');}
+ const lg=$('vclogin');if(lg)lg.remove();const fin=()=>{try{VC_PROG=null;vcAplicar();dibujar();}catch(e){}};
+ if(conInicial){acPedirClaveNueva(u,correo,fin);return true;}fin();return true;};
+vcEntrarClave=function(correo,clave){return acEntrar(correo,clave);};
+(function(){if(DATA!=='Campo')return;
+ // si la sesión viene de una clave inicial (sin clave propia aún), al abrir se exige crearla
+ const _init12=initDatos;initDatos=function(){_init12();setTimeout(()=>{try{const u=acSesionValida();if(u&&u.correo&&u.clave_inicial&&!$('vcnueva')&&!$('vclogin')){const v=acHashVigente(u);if(v.inicial&&localStorage.getItem('pms_sesion')==u.clave_hash)acPedirClaveNueva(u,u.correo,()=>{try{vcAplicar();dibujar();}catch(e){}});}}catch(e){}},1400);};
+})();
+
 </script></body></html>
