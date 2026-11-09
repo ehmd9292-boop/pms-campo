@@ -2257,10 +2257,10 @@ function vcLoginPantalla(msg){if($('vclogin'))return;const d=document.createElem
  <div id="vcloginmsg" style="font-size:11px;color:#b26a00;margin-top:8px">${msg||(listo?'':'Cargando los datos de la vía… espere unos segundos y toque Entrar.')}</div>
  ${window.CONTRATISTA_APP?'':'<div onclick="vcLoginCerrar()" style="font-size:11px;color:#004A61;margin-top:12px;text-align:center;cursor:pointer">Soy de BTS: volver a la app completa</div>'}</div>`;document.body.appendChild(d);}
 function vcLoginCerrar(){const lg=$('vclogin');if(lg)lg.remove();}
-function vcSalirCorreo(){localStorage.removeItem('pms_vista_contratista');localStorage.removeItem('pms_correo');if(window.CONTRATISTA_APP){localStorage.removeItem('pms_usuario');vcLoginPantalla();}try{vcAplicar();dibujar();}catch(e){}}
+function vcSalirCorreo(){localStorage.removeItem('pms_vista_contratista');localStorage.removeItem('pms_correo');localStorage.removeItem('pms_sesion');if(window.CONTRATISTA_APP){localStorage.removeItem('pms_usuario');vcLoginPantalla();}try{vcAplicar();dibujar();}catch(e){}}
 (function(){if(DATA!=='Campo')return;
  // cuando terminan de llegar los datos (contratos, usuarios), la vista contratista se vuelve a armar: así ya no dice «sin contrato activo»
- const _init=initDatos;initDatos=function(){_init();setTimeout(()=>{try{const lm=$('vcloginmsg');if(lm&&/Cargando/.test(lm.textContent))lm.textContent='';if(window.CONTRATISTA_APP){const u=vcUsuarioCorreo(localStorage.getItem('pms_correo'));if(u&&u.contrato){localStorage.setItem('pms_vista_contratista','1');localStorage.setItem('pms_usuario',u.nombre);localStorage.setItem('pms_contrato',u.contrato);const lg=$('vclogin');if(lg)lg.remove();}else{localStorage.removeItem('pms_vista_contratista');vcLoginPantalla(localStorage.getItem('pms_correo')?'Ese correo ya no está autorizado o no tiene contrato: pida al coordinador que lo revise.':'');}}
+ const _init=initDatos;initDatos=function(){_init();setTimeout(()=>{try{const lm=$('vcloginmsg');if(lm&&/Cargando/.test(lm.textContent))lm.textContent='';if(window.CONTRATISTA_APP){const u=vcUsuarioCorreo(localStorage.getItem('pms_correo'));if(u&&u.contrato&&(typeof vcSesionOk!=='function'||vcSesionOk(u))){localStorage.setItem('pms_vista_contratista','1');localStorage.setItem('pms_usuario',u.nombre);localStorage.setItem('pms_contrato',u.contrato);const lg=$('vclogin');if(lg)lg.remove();}else{localStorage.removeItem('pms_vista_contratista');vcLoginPantalla(localStorage.getItem('pms_correo')?'Ese correo ya no está autorizado o no tiene contrato: pida al coordinador que lo revise.':'');}}
   VC_PROG=null;vcAplicar();if(vcActiva())dibujar();}catch(e){console.error(e);}},600);};
  // en la app de contratistas: «salir» cierra la sesión del correo (no vuelve a la app completa)
  if(window.CONTRATISTA_APP){vcSalir=vcSalirCorreo;
@@ -2515,6 +2515,60 @@ VC_FASE[0]='slurry pendiente (microfresado y sello ya hechos)';
   capa.eachLayer(ln=>{const tt=ln.getTooltip&&ln.getTooltip();if(!tt)return;const txt=String(tt.getContent());const m=/<b>Trayecto ([^·<]+) · ([^·<]+) · ([^·<]*) · PR ([\d+]+)<\/b>/.exec(txt);if(!m)return;
    const r=prog.find(x=>x.slurry_pend&&String(x.t)==m[1].trim()&&String(x.cz)==m[2].trim()&&prTxt((FICHA[x.cod]||{}).pri||0)==m[4]);if(!r)return;ln.setStyle({color:'#e65100',weight:10});ln.setTooltipContent(`<b>Trayecto ${r.t} · ${r.cz}${r.car?' · '+r.car:''} · PR ${prTxt((FICHA[r.cod]||{}).pri||0)}</b><br><b>FALTA EL SLURRY</b> — microfresado y sello hechos el ${r.fecha_micro}<br>slurry: ${fmt(r.acts[0].q,0)} m²${r.hecho?' ✓ registrado':''}<br><i>toque para registrar la obra</i>`);});
   const lg=$('leg');if(lg&&!lg.querySelector('.v234'))lg.insertAdjacentHTML('beforeend','<div class="v234"><i style="background:#e65100"></i>falta el slurry (micro y sello hechos)</div>');}catch(e){}};
+})();
+
+// ================= v235 (Erix, 9-nov-2026, 12:59): entrada del contratista con CORREO y CLAVE; «salir» de la vista contratista sale de verdad.
+// La clave la fija BTS en el PC (Contratos → Usuarios y cuadrillas, columna Clave); a la app solo viaja una huella (hash) de correo+clave,
+// nunca la clave. Al entrar se guarda la sesión (pms_sesion = esa huella): si BTS cambia la clave, el contratista queda por fuera.
+async function vcHash(txt){try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(txt));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}catch(e){return '';}}
+function vcSesionOk(u){if(!u)return false;if(!u.clave_hash)return true;return localStorage.getItem('pms_sesion')==u.clave_hash;}
+async function vcEntrarClave(correo,clave){correo=String(correo||'').trim().toLowerCase();clave=String(clave||'').trim();const u=vcUsuarioCorreo(correo);const msg=t=>{const m=$('vcloginmsg');if(m)m.textContent=t;else alert(t);};
+ if(!u){msg('Ese correo no está autorizado. Pida al coordinador de BTS que lo registre en Contratos → Usuarios y cuadrillas.');return false;}
+ if(!u.contrato){msg('El usuario '+u.nombre+' no tiene contrato asignado en el PC.');return false;}
+ if(u.clave_hash){if(!clave){msg('Escriba la clave que le entregó BTS.');return false;}const h=await vcHash(correo+':'+clave);if(h!==u.clave_hash){msg('La clave no es correcta. Si la olvidó, pida a BTS una nueva.');return false;}localStorage.setItem('pms_sesion',h);}
+ else localStorage.removeItem('pms_sesion');
+ localStorage.setItem('pms_usuario',u.nombre);localStorage.setItem('pms_contrato',u.contrato);if(u.contratista)localStorage.setItem('pms_contratista',u.contratista);localStorage.setItem('pms_correo',correo);localStorage.setItem('pms_vista_contratista','1');
+ const lg=$('vclogin');if(lg)lg.remove();try{VC_PROG=null;vcAplicar();dibujar();}catch(e){}return true;}
+vcEntrarCorreo=function(correo){return vcEntrarClave(correo,$('vcclave')?$('vcclave').value:'');};
+(function(){if(DATA!=='Campo')return;
+ // la pantalla de entrada gana el campo de clave
+ const _lp10=vcLoginPantalla;vcLoginPantalla=function(msg){_lp10(msg);const c=$('vccorreo');if(c&&!$('vcclave'))c.insertAdjacentHTML('afterend',`<input id="vcclave" type="password" placeholder="clave" autocomplete="current-password" style="width:100%;font-size:16px;padding:10px;border:1px solid #bbb;border-radius:8px;margin-top:8px" onkeydown="if(event.key==='Enter')vcEntrarCorreo($('vccorreo').value)">`);
+  const b=$('vclogin')&&$('vclogin').querySelector('button');if(b)b.setAttribute('onclick','vcEntrarCorreo($(\'vccorreo\').value)');};
+ // en la app de contratistas la sesión vale solo con correo autorizado Y clave vigente
+ if(window.CONTRATISTA_APP){vcActiva=function(){try{const u=vcUsuarioCorreo(localStorage.getItem('pms_correo'));return !!(u&&u.contrato&&vcSesionOk(u));}catch(e){return false;}};
+  const _init10=initDatos;initDatos=function(){_init10();setTimeout(()=>{try{const u=vcUsuarioCorreo(localStorage.getItem('pms_correo'));if(u&&u.contrato&&!vcSesionOk(u)){localStorage.removeItem('pms_vista_contratista');vcLoginPantalla('Su clave cambió o venció: vuelva a entrar con la clave que le entregó BTS.');}}catch(e){}},900);};}
+ else{      // app completa de BTS: «salir» de la vista contratista limpia también el usuario contratista con el que se entró por correo
+  vcSalir=function(){try{const u=usuariosDet().find(x=>x.nombre==(localStorage.getItem('pms_usuario')||''));if(u&&String(u.rol||'').toLowerCase()=='contratista'){localStorage.removeItem('pms_usuario');localStorage.removeItem('pms_contrato');localStorage.removeItem('pms_contratista');}}catch(e){}
+   localStorage.removeItem('pms_vista_contratista');localStorage.removeItem('pms_correo');localStorage.removeItem('pms_sesion');VC_PROG=null;try{vcAplicar();dibujar();}catch(e){}};}
+})();
+
+// ================= v236 (Erix, 9-nov-2026, 13:08): UNA sola app (PMS Campo, pms-campo) para todos. Cada persona entra con el correo y la
+// clave que BTS le asigna en el PC (Contratos → Usuarios y cuadrillas) y ve lo de su ROL: contratista → solo su contrato (vista contratista);
+// campo / inspector / coordinador_junior / gestor / administrador → la app completa. Si ningún usuario tiene correo todavía, la app sigue
+// abriendo como antes (sin clave), para no dejar a las cuadrillas por fuera mientras BTS asigna los accesos.
+function acSesionValida(){try{const correo=localStorage.getItem('pms_correo')||'';const u=correo?vcUsuarioCorreo(correo):null;if(u&&vcSesionOk(u)&&(localStorage.getItem('pms_usuario')||'')==u.nombre)return u;
+ // usuario antiguo sin correo asignado en el PC (p. ej. Cuadrilla 1): sigue entrando mientras no tenga correo
+ const n=localStorage.getItem('pms_usuario')||'';const ud=usuariosDet().find(x=>x.nombre==n);if(ud&&!ud.correo)return ud;return null;}catch(e){return null;}}
+function acHayAccesos(){return usuariosDet().some(u=>u.correo);}
+function acEntrar(correo,clave){correo=String(correo||'').trim().toLowerCase();clave=String(clave||'').trim();const u=vcUsuarioCorreo(correo);const msg=t=>{const m=$('vcloginmsg');if(m)m.textContent=t;else alert(t);};
+ if(!u){msg('Ese correo no está autorizado. Pida al coordinador de BTS que lo registre en Contratos → Usuarios y cuadrillas.');return Promise.resolve(false);}
+ const fin=async()=>{if(u.clave_hash){if(!clave){msg('Escriba la clave que le entregó BTS.');return false;}const h=await vcHash(correo+':'+clave);if(h!==u.clave_hash){msg('La clave no es correcta. Si la olvidó, pida a BTS una nueva.');return false;}localStorage.setItem('pms_sesion',h);}else localStorage.removeItem('pms_sesion');
+  localStorage.setItem('pms_usuario',u.nombre);localStorage.setItem('pms_correo',correo);
+  if(String(u.rol||'').toLowerCase()=='contratista'){if(!u.contrato){msg('El usuario '+u.nombre+' no tiene contrato asignado en el PC.');return false;}localStorage.setItem('pms_contrato',u.contrato);if(u.contratista)localStorage.setItem('pms_contratista',u.contratista);localStorage.setItem('pms_vista_contratista','1');}
+  else{localStorage.removeItem('pms_vista_contratista');localStorage.removeItem('pms_contrato');localStorage.removeItem('pms_contratista');}
+  const lg=$('vclogin');if(lg)lg.remove();try{VC_PROG=null;vcAplicar();dibujar();}catch(e){}return true;};return fin();}
+function acCerrarSesion(){['pms_vista_contratista','pms_correo','pms_sesion','pms_usuario','pms_contrato','pms_contratista'].forEach(k=>localStorage.removeItem(k));VC_PROG=null;try{vcAplicar();dibujar();}catch(e){}acLogin();}
+function acLogin(msg){if(window.CONTRATISTA_APP)return vcLoginPantalla(msg);if($('vclogin'))return;vcLoginPantalla(msg);const d=$('vclogin');if(!d)return;
+ const t=d.querySelector('div[style*="font-size:20px"]');if(t)t.textContent='PMS BTS · Campo';const s=t&&t.nextElementSibling;if(s)s.textContent='Entre con el correo y la clave que le asignó BTS. Lo que ve depende de su rol (cuadrilla, inspector, coordinador, gestor o contratista).';
+ [...d.querySelectorAll('div')].forEach(x=>{if(/Soy de BTS/.test(x.textContent)&&x.children.length==0)x.remove();});const b=d.querySelector('button');if(b)b.setAttribute('onclick','acEntrar($(\'vccorreo\').value,$(\'vcclave\')?$(\'vcclave\').value:\'\')');const c=$('vcclave');if(c)c.setAttribute('onkeydown',"if(event.key==='Enter')acEntrar($('vccorreo').value,this.value)");}
+(function(){if(DATA!=='Campo'||window.CONTRATISTA_APP)return;
+ // al cargar los datos: si hay accesos definidos y la sesión no vale, pedir correo y clave
+ const _init11=initDatos;initDatos=function(){_init11();setTimeout(()=>{try{if(acHayAccesos()&&!acSesionValida()){localStorage.removeItem('pms_vista_contratista');acLogin();}}catch(e){console.error(e);}},1100);};
+ // ☰ Más: «Cerrar sesión» para todos (la vista contratista ya tiene su «salir» en la banda)
+ const _vm11=verMas;verMas=function(){_vm11();try{const v=masCaja();if(!v||!acHayAccesos())return;if([...v.querySelectorAll('div[onclick]')].some(d=>/acCerrarSesion/.test(d.getAttribute('onclick')||'')))return;
+  const u=acSesionValida();v.insertAdjacentHTML('beforeend',`<div onclick="masCerrar();acCerrarSesion()" style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:8px;padding:9px 10px;margin:5px 0;cursor:pointer"><span style="font-size:22px">🚪</span><div style="flex:1"><b style="font-size:13px">Cerrar sesión</b><div style="font-size:11px;color:#666">${u?u.nombre+' · '+(u.rol||'')+(u.correo?' · '+u.correo:''):'entrar con otro correo'}</div></div><span style="color:#999">›</span></div>`);}catch(e){}};
+ // «salir» de la vista contratista: si entró con correo de contratista, cierra la sesión (no hay vista de BTS para él)
+ const _vs11=vcSalir;vcSalir=function(){try{const u=acSesionValida();if(u&&String(u.rol||'').toLowerCase()=='contratista'&&u.correo){acCerrarSesion();return;}}catch(e){}_vs11();};
 })();
 
 </script></body></html>
