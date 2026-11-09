@@ -3070,4 +3070,29 @@ function acBloqueContratista(){const L=acContratista();if(!L.length)return '';re
  const _mr43=misRegistros;misRegistros=function(){return _mr43().filter(r=>r.tipo!='acuerdo');};
 })();
 
+// ================= v244 (Erix, 9-nov-2026, 16:50): la app se pone al día sola con la publicación rápida del PC (cada hora), sin cerrarla
+// Cada 10 minutos, y al volver a la app, mira si el PC publicó datos nuevos; si sí, trae solo lo liviano (órdenes, firmas, validaciones, bitácoras…).
+const LIVIANAS=['usuarios','permisos','recibidos','por_validar','ordenes','bitacoras','avance_contratos','zonas','pendientes','acuerdos','ejecutores','acordado','sugerencias_plan','reglas_plan'];
+let REFRESCO={t:0,ocupado:false};
+function avisoCorto(txt){try{let a=$('avisocorto');if(!a){a=document.createElement('div');a.id='avisocorto';a.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:64px;z-index:5000;background:#004A61;color:#fff;border-radius:18px;padding:8px 16px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.35);max-width:90vw;text-align:center';document.body.appendChild(a);}a.textContent=txt;a.style.display='block';clearTimeout(a._t);a._t=setTimeout(()=>{a.style.display='none';},5000);}catch(e){}}
+async function refrescarLiviano(manual){if(DATA!=='Campo'||REFRESCO.ocupado||!navigator.onLine||!VERSION)return false;if(!manual&&Date.now()-REFRESCO.t<4*60000)return false;REFRESCO.ocupado=true;REFRESCO.t=Date.now();
+ try{const v=await fetch('datos/'+DATA+'_version.json?t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():null);if(!v||!v.generado||v.generado==VERSION.generado){if(manual)avisoCorto('Ya tiene lo último ('+((VERSION&&VERSION.generado)||'')+')');return false;}
+  if(v.huella&&VERSION.huella&&v.huella!=VERSION.huella){avisoCorto('Hay una versión nueva completa de la app: ciérrela y ábrala de nuevo para verla.');return false;}      // cambió lo pesado (mapa, plan): eso se carga al abrir
+  if(!v.extra_gz||typeof DecompressionStream==='undefined')return false;
+  const x=await fetch('datos/'+v.extra_gz+'?t='+Date.now(),{cache:'no-store'}).then(r=>new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).json());
+  LIVIANAS.forEach(k=>{if(k in x)VERSION[k]=x[k];});VERSION.generado=v.generado;VERSION.rapida=v.rapida;
+  try{inicioBoton();}catch(e){}try{validarBoton();}catch(e){}try{nReg();}catch(e){}
+  // si la sesión dejó de valer (clave restablecida o usuario retirado), se pide entrar de nuevo
+  try{if(acHayAccesos()&&localStorage.getItem('pms_correo')&&!acSesionValida()&&!$('vclogin'))acLogin('Sus datos de entrada cambiaron: entre de nuevo.');}catch(e){}
+  avisoCorto('🔄 Datos actualizados · '+String(v.generado).slice(11)+(typeof inicioPend==='function'&&inicioPend()?' · '+inicioPend()+' pendiente(s)':''));return true;}
+ catch(e){return false;}finally{REFRESCO.ocupado=false;}}
+(function(){if(DATA!=='Campo')return;
+ setInterval(()=>{if(document.visibilityState==='visible')refrescarLiviano(false);},10*60000);
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(()=>refrescarLiviano(false),1500);});
+ window.addEventListener('online',()=>setTimeout(()=>refrescarLiviano(false),3000));
+ // después de enviar lo propio, se vuelve a mirar a los 6 minutos (lo que tarda la publicación rápida cuando coincide)
+ // botón «Actualizar» en el inicio por rol
+ const _ir44=inicioRol;inicioRol=function(){_ir44();try{const v=masCaja();const pie=[...v.querySelectorAll('div')].find(d=>/^Datos del /.test(d.textContent||'')&&d.children.length==0);if(pie&&!$('brefresco'))pie.insertAdjacentHTML('afterend','<button id="brefresco" type="button" onclick="refrescarLiviano(true).then(ok=>{if(ok)inicioRol();})" style="width:100%;margin-top:6px;border:1px solid #004A61;border-radius:8px;padding:10px;background:#fff;color:#004A61;font-size:14px">🔄 Buscar datos nuevos ahora</button><div style="font-size:11px;color:#666;margin-top:4px">El PC publica lo nuevo cada hora (6:30 a. m. a 7:30 p. m.); la app lo trae sola.</div>');}catch(e){}};
+})();
+
 </script></body></html>
