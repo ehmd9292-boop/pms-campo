@@ -73,7 +73,7 @@ function cargarDatos(){const t0=Date.now();$('kpi').innerHTML='Cargando datos…
   return Promise.all([pf,pp,Promise.resolve(v)]);})
  .then(([f,d,v])=>{FICHA=f;DATOS=d;VERSION=v;
   // bandeja en la nube configurada en el PC (campo\nube.txt): el celular la toma solo, sin pegar direcciones
-  try{const nu=v&&v.proyecto&&v.proyecto.nube;if(nu&&!localStorage.getItem('pms_servidor')){localStorage.setItem('pms_servidor',nu);SRV=nu.replace(/\/$/,'');enServidor=true;setTimeout(cargarEstado,500);}}catch(e){}
+  try{const nu=v&&v.proyecto&&v.proyecto.nube;const _gu=localStorage.getItem('pms_servidor')||'';if(nu&&_gu.replace(/\/$/,'')!==nu.replace(/\/$/,'')){      /* v257: si el celular tenía guardada otra dirección (vieja o la de esta página), toma la de la nube */localStorage.setItem('pms_servidor',nu);SRV=nu.replace(/\/$/,'');enServidor=true;setTimeout(cargarEstado,500);}}catch(e){}
   initDatos();try{modPintar();}catch(e){}try{intCapa();}catch(e){}const vv=$('ver');if(vv){const dd=v?Math.round((Date.now()-new Date(v.generado.replace(' ','T')))/864e5):null;vv.textContent='datos del '+(v?v.generado:'—')+(v?' · '+v.secciones+' secciones · '+v.fotos+' fotos':'')+' · cargados en '+((Date.now()-t0)/1000).toFixed(1)+' s'+(dd!=null&&dd>30?' · ⚠ datos de hace '+dd+' días: pida al PC que publique de nuevo (Publicar_Celular.bat)':'');vv.style.color=(dd!=null&&dd>30)?'#b71c1c':'#777';}})
  .catch(e=>{$('kpi').innerHTML='<span style="color:#b71c1c">No se pudieron cargar los datos ('+e.message+'). Con conexión, vuelva a abrir la página o toque ⬇ Sin conexión para guardarlos en el celular.</span>';});}
 function llenarAnios(){anioSel.innerHTML='';Object.keys(DATOS[escSel.value]).forEach(a=>{const o=document.createElement('option');o.value=a;o.text=a;anioSel.add(o);});}
@@ -3360,5 +3360,49 @@ function cuDibujar(){try{capa.clearLayers();}catch(e){}try{[capaInt,window.MODLA
  const _om56=otMapa;otMapa=function(id){if(!cuOn())return _om56.apply(this,arguments);const o=otDe(id);if(!o)return;masCerrar();cuDibujar();const q=o.cod&&COORDS[o.cod];const ll=q?[(q[0]+q[2])/2,(q[1]+q[3])/2]:(o.lat!=null?[+o.lat,+o.lon]:null);if(!ll)return;map.setView(ll,17);
    try{L.popup().setLatLng(ll).setContent(`<div style="font-size:15px;font-weight:bold">${esc(cuNombre(o))}</div>`).openOn(map);}catch(e){}cuTocar(o);};
  try{if(cuOn())setTimeout(()=>{try{dibujar();}catch(e){}},1600);}catch(e){}
+})();
+// ================= v257 (Erix, 10-nov-2026, 12:22): AVISOS AL INSTANTE. La app de la cuadrilla (y del coordinador) consulta la bandeja en la nube
+// cada minuto (accion=avisos): un reporte nuevo aparece enseguida como orden (sin esperar al PC), suena y vibra el celular y sale la notificación.
+// Si la bandeja aún no tiene la versión nueva (Codigo.gs v257), no pasa nada: sigue llegando cuando el PC publica.
+let AV=(function(){try{return JSON.parse(localStorage.getItem('pms_avisos')||'')||{u:'',L:[]};}catch(e){return {u:'',L:[]};}})();
+function avGuardar(){try{AV.L=AV.L.filter(a=>a.f>=new Date(Date.now()-7*864e5).toISOString()).slice(-300);localStorage.setItem('pms_avisos',JSON.stringify(AV));}catch(e){}}
+function avQuien(){try{const r=rolActual();return r=='campo'||r=='coordinador_junior'||r=='gestor'||r=='administrador';}catch(e){return false;}}
+function avOrden(a){return {id:a.id,org:a.id,prov:1,f:String(a.f||'').slice(0,10),rep:a.usuario||'',cl:a.cl||'obr',el:a.el||a.grupo||'Reporte',t:a.t,cz:a.cz,car:a.car,pr:a.pr,cod:a.cod||'',lat:a.lat,lon:a.lon,
+  d:(a.def?a.def+(a.d?'. ':''):'')+(a.d||''),g:a.g||'media',p:({alta:'1',media:'2',baja:'3'})[a.g]||'2',z:zonaDe(a.t),cu:a.cu||'',est:'abierta',rf:String(a.f||'').replace('T',' ').slice(0,16),fotos:[],fd:[]};}
+function avMeToca(o){try{const r=rolActual();if(r=='campo'){const yo=localStorage.getItem('pms_usuario')||'';const z=miZona();return o.cu?o.cu==yo:(!z||!o.z||o.z==z);}return enMiZona(o.t);}catch(e){return true;}}
+function avPitar(){try{const C=new (window.AudioContext||window.webkitAudioContext)();[0,0.35,0.7].forEach(t=>{const o=C.createOscillator(),g=C.createGain();o.frequency.value=880;o.connect(g);g.connect(C.destination);g.gain.setValueAtTime(0.25,C.currentTime+t);o.start(C.currentTime+t);o.stop(C.currentTime+t+0.22);});}catch(e){}}
+function avNotificar(L){if(!L.length)return;const a=L[0];const pr=(a.pr!=null&&a.pr!=='')?' PR '+prTxt(+a.pr):'';const tit=(L.length>1?L.length+' reportes nuevos':'Nuevo reporte')+(L.some(x=>x.g=='alta')?' · URGENTE':'');
+ const cuerpo=`${a.grupo||''} ${a.el||''} · Trayecto ${a.t} ${a.cz||''}${pr}${a.def?' · '+a.def:''}`.trim();
+ try{navigator.vibrate&&navigator.vibrate([400,150,400,150,400]);}catch(e){}avPitar();try{avisoCorto('🔔 '+tit+': '+cuerpo);}catch(e){}
+ try{if('Notification' in window&&Notification.permission==='granted'){const op={body:cuerpo,tag:'pms-'+a.id,renotify:true,vibrate:[400,150,400],icon:'icono.svg',badge:'icono.svg',data:{url:location.href}};
+   (navigator.serviceWorker&&navigator.serviceWorker.getRegistration?navigator.serviceWorker.getRegistration():Promise.resolve(null)).then(r=>{if(r&&r.showNotification)r.showNotification('PMS Campo: '+tit,op);else new Notification('PMS Campo: '+tit,op);}).catch(()=>{try{new Notification('PMS Campo: '+tit,op);}catch(e){}});}}catch(e){}}
+let AV_OCUP=false;
+function avPedir(manual){if(AV_OCUP||!avQuien()||typeof esNube!='function'||!esNube()||!navigator.onLine)return Promise.resolve(0);AV_OCUP=true;
+ return fetchT(SRV+'?accion=avisos&desde='+encodeURIComponent(AV.u||''),{cache:'no-store',redirect:'follow'},20000).then(r=>r.json()).then(j=>{if(!j||!j.ok||!Array.isArray(j.avisos))return 0;
+   const ya=new Set(AV.L.map(a=>a.id));const base=new Set(((VERSION&&VERSION.ordenes)||[]).map(o=>o.org).filter(Boolean));const nuevos=j.avisos.filter(a=>a&&a.id&&!ya.has(a.id));
+   const primera=!AV.u;nuevos.forEach(a=>AV.L.push(a));if(j.avisos.length)AV.u=j.avisos.map(a=>a.f).sort().pop();else if(!AV.u)AV.u=j.hora||'';avGuardar();
+   const mios=nuevos.filter(a=>!base.has(a.id)&&avMeToca(avOrden(a)));
+   if(mios.length&&!primera)avNotificar(mios);
+   if(nuevos.length){try{if(cuOn()){cuDibujar();const v=masCaja();if(v&&getComputedStyle(v).display!='none'&&/Inicio/.test(v.innerText.slice(0,40)))cuInicio();}}catch(e){}try{inicioBoton();}catch(e){}}
+   if(manual)try{avisoCorto(mios.length?'🔔 '+mios.length+' reporte(s) nuevo(s)':'Sin reportes nuevos');}catch(e){}
+   return mios.length;}).catch(()=>0).finally(()=>{AV_OCUP=false;});}
+function avActivar(){if(!('Notification' in window)){alert('Este celular no permite avisos en el navegador. Igual suena y vibra con la app abierta.');return;}
+ Notification.requestPermission().then(p=>{if(p==='granted'){avisoCorto('🔔 Avisos activados en este celular');try{navigator.serviceWorker.getRegistration().then(r=>r&&r.showNotification('PMS Campo',{body:'Así le llegarán los reportes nuevos.',icon:'icono.svg'}));}catch(e){}}
+  else alert('No se activaron los avisos. Para activarlos: menú del navegador → Configuración del sitio → Notificaciones → Permitir.');try{cuOn()?cuInicio():inicioRol();}catch(e){}});}
+(function(){if(DATA!=='Campo')return;
+ // los avisos aparecen como órdenes hasta que el PC crea la orden de verdad (con el mismo origen)
+ const _o57=ordenes;ordenes=function(){const L=_o57.apply(this,arguments);try{if(!AV.L.length)return L;const org=new Set(L.map(o=>o.org).filter(Boolean)),ids=new Set(L.map(o=>o.id));
+   const P=conLocal(AV.L.filter(a=>!org.has(a.id)&&!ids.has(a.id)).map(avOrden),'pms_ord_loc');return P.concat(L);}catch(e){return L;}};
+ // botón para activar las notificaciones (cuadrilla y coordinador)
+ const _ci57=cuInicio;cuInicio=function(){const r=_ci57.apply(this,arguments);try{avBoton();}catch(e){}return r;};
+ const _ir57=inicioRol;inicioRol=function(){const r=_ir57.apply(this,arguments);try{if(!cuOn()&&avQuien())avBoton();}catch(e){}return r;};
+ window.avBoton=function(){const v=masCaja();if(!v||v.querySelector('#avbtn'))return;const ok='Notification' in window&&Notification.permission==='granted';const h=v.firstElementChild&&v.firstElementChild.children[1];
+   const html=ok?`<div id="avbtn" style="font-size:12px;color:#2e7d32;margin:6px 0">🔔 Avisos activos: cuando llegue un reporte nuevo el celular suena y vibra.</div>`:`<div id="avbtn" onclick="avActivar()" style="display:flex;align-items:center;gap:10px;background:#fff8e1;border:2px solid #f9a825;border-radius:12px;padding:10px 12px;margin:8px 0;cursor:pointer"><span style="font-size:28px">🔔</span><div><b style="font-size:15px">Activar avisos en este celular</b><div style="font-size:12px;color:#555">para que le suene cuando llegue un reporte nuevo</div></div></div>`;
+   if(h)h.insertAdjacentHTML('afterend',html);else v.insertAdjacentHTML('afterbegin',html);};
+ // «Buscar órdenes nuevas» también consulta los avisos
+ const _rl57=window.refrescarLiviano;if(typeof _rl57=='function')window.refrescarLiviano=refrescarLiviano=function(){avPedir(true);return _rl57.apply(this,arguments);};
+ // cada minuto mientras la app esté abierta, y al volver a ella
+ setTimeout(()=>avPedir(),4000);setInterval(()=>{if(document.visibilityState=='visible')avPedir();},60000);
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible')avPedir();});
 })();
 </script></body></html>
