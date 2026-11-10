@@ -2287,7 +2287,7 @@ const _vcProg5=vcPrograma;vcPrograma=function(){vcContratoAuto();const c=vcContr
  const valor=+c.valor||0;const nsem=Math.max(1,Math.round((+c.plazo_meses||4)*4.33));const vistos=new Set();const tramos=[];
  const SLU='Slurry (sello + slurry seal)',SEL='Sello de fisuras',MIC='Microfresado';
  anios.forEach(a=>{(DATOS[esc][a]||[]).forEach(f=>{if(vistos.has(f[0]))return;if(f[19]=='none'||f[1]=='none'||f[1]=='excl')return;const acts=[];
-  Object.keys(items).forEach(act=>{const q=+f[VC_Q[act][0]]||0;if(q>0)acts.push({act:act,q:q,un:items[act].un,costo:q*items[act].pu*fa});});
+  Object.keys(items).forEach(act=>{const q=+f[VC_Q[act][0]]||0;if(q>0&&!vcHechoPrevio(f[0],act,c))acts.push({act:act,q:q,un:items[act].un,costo:q*items[act].pu*fa});});      /* v248: lo ya hecho antes de este contrato no entra (contrato nuevo: todo su valor es para obra nueva) */
   if(!acts.length)return;vistos.add(f[0]);const micro=acts.find(x=>x.act==MIC);const slu=acts.find(x=>x.act==SLU);const cc=vcCzCar(f[0]);
   tramos.push({cod:f[0],t:f[18],cz:cc[0],car:cc[1],pri:+f[6]||99,rango:+f[15]||0,anio:a,L:f[17],desc:f[5]||'',acts:acts,fase:micro?1:(slu?2:3),k:micro?'micro':(slu?'slurry':'sello')});});});
  const porUrg=(x,y)=>x.anio-y.anio||x.pri-y.pri||x.rango-y.rango;const prN=c_=>{const m=/Pr (\d+)/.exec(String(c_));return m?+m[1]:0;};const tN=t_=>parseFloat(String(t_).replace(/[^\d.]/g,''))||0;
@@ -2299,8 +2299,8 @@ const _vcProg5=vcPrograma;vcPrograma=function(){vcContratoAuto();const c=vcContr
  tramos.filter(t=>t.fase==1&&t.anio<=aMicro).sort(porUrg).forEach(tr=>{if(!valor||gasto+costoDe(tr)<=valor)toma(tr);});
  // fase 2: SLURRY SEAL con prioridad (todos los años del plan, por urgencia; puede pasarse de la cantidad contratada). El sello de esos tramos
  // entra mientras quepa en la cantidad contratada de sello; si no, el tramo entra solo con slurry (el sello lo hará BTS el otro año).
- tramos.filter(t=>t.fase==2).sort(porUrg).forEach(tr=>{const s=tr.acts.find(x=>x.act==SEL);if(s&&capSel&&(usado[SEL]||0)+s.q>capSel*1.02){s.omitido=true;s.mot='cant';}
-  if(valor&&gasto+costoDe(tr)>valor){if(s&&!s.omitido){s.omitido=true;s.mot='din';if(gasto+costoDe(tr)>valor){s.omitido=false;s.mot='';return;}}else return;}toma(tr);});
+ // v247 (Erix, 9-nov-2026 21:48): en este contrato el tramo de slurry entra COMPLETO (slurry + su sello de fisuras) o no entra; el límite es el valor del contrato
+ tramos.filter(t=>t.fase==2).sort(porUrg).forEach(tr=>{if(valor&&gasto+costoDe(tr)>valor)return;toma(tr);});
  // fase 3: lo que sobre, en sello de fisuras de los tramos que solo necesitan sello (por urgencia)
  // (solo tramos con al menos 30 ml de sello: mandar al contratista por 1 o 2 ml no vale la pena; eso lo hace la cuadrilla de BTS)
  tramos.filter(t=>t.fase==3&&t.acts.reduce((s,x)=>s+x.q,0)>=30).sort(porUrg).forEach(tr=>{if(!valor||gasto+costoDe(tr)<=valor)toma(tr);});
@@ -2316,10 +2316,10 @@ function vcFiltroHtml(prog,idp){const ts=[...new Set(prog.map(r=>String(r.t)))].
 function vcFiltroCambio(desde){try{dibujar();}catch(e){}if(desde=='lista')vcListado();else{const f=$('vcfilmapa');if(f)f.innerHTML=vcFiltroHtml(vcPrograma(),'mapa');}}
 function vcListado(){vcContratoAuto();const c=vcContrato();if(!c){alert('No hay contrato activo en la app. En el PC: Contratos → Ficha del contrato (Activo).');return;}const prog=vcPrograma();const sel=prog.filter(vcPasaFiltro);
  const tot=prog.gasto||0;const hechos=prog.filter(r=>r.hecho).length;const it=prog.items||{},u=prog.usado||{};
- const cant=Object.keys(it).map(a=>{const cap=it[a].cap,q=u[a]||0;return `${a.replace(' (sello + slurry seal)',' seal')}: <b>${fmt(q,0)}</b> ${it[a].un}${cap?' de '+fmt(cap,0)+(q>cap*1.02?' <span style="color:#b26a00">(se pasa: prioridad al slurry)</span>':''):''}`;}).join('<br>');
+ const cant=Object.keys(it).map(a=>{const cap=it[a].cap,q=u[a]||0;return `${a.replace(' (sello + slurry seal)',' seal')}: <b>${fmt(q,0)}</b> ${it[a].un}${cap?' de '+fmt(cap,0)+(q>cap*1.02?' <span style="color:#b26a00">(pasa la cantidad contratada; manda el valor del contrato)</span>':''):''}`;}).join('<br>');
  let h=`<div style="background:#ef6c00;color:#fff;border-radius:8px;padding:8px 10px;margin:4px 0 8px"><b style="font-size:13px">${c.contratista||''} · ${c.contrato}</b><div style="font-size:11px;opacity:.95">${prog.length} tramos a intervenir · ${cop(tot)} de ${cop(+c.valor||0)} (con AIU e IVA) · ${hechos} ya registrados</div></div>
  <div style="background:#fff;border-radius:8px;padding:6px 10px;margin:4px 0;font-size:12px"><b>Cantidades que resultan</b><br>${cant}</div>
- <div style="font-size:11px;color:#666;margin:2px 0 4px">Prioridad: microfresado del primer año del plan, luego slurry seal (puede pasar la cantidad contratada) y el sello hasta su cantidad; el sello que no cabe lo hace BTS. Orden por trayecto, calzada, carril y PR. Toque un tramo para abrir su ficha y registrar.</div>`+vcFiltroHtml(prog,'lista');
+ <div style="font-size:11px;color:#666;margin:2px 0 4px">Prioridad: microfresado del primer año del plan, luego slurry seal con su sello de fisuras (el tramo entra completo; las cantidades pueden pasar las contratadas, el límite es el valor del contrato) y, si queda dinero, tramos de solo sello. Orden por trayecto, calzada, carril y PR. Toque un tramo para abrir su ficha y registrar.</div>`+vcFiltroHtml(prog,'lista');
  const porT={};sel.forEach(r=>{(porT[r.t]=porT[r.t]||[]).push(r);});const tN=t_=>parseFloat(String(t_).replace(/[^\d.]/g,''))||0;
  h+=`<div style="font-size:11px;color:#444;margin:2px 0">${sel.length} tramo(s) en la lista · ${cop(sel.reduce((s,r)=>s+r.costo,0))}</div>`;
  Object.keys(porT).sort((a,b)=>tN(a)-tN(b)||a.localeCompare(b)).forEach(t=>{const rs=porT[t];const cs=rs.reduce((x,r)=>x+r.costo,0);h+=`<div style="background:#fff;border-radius:8px;padding:6px 10px;margin:5px 0"><b style="font-size:13px">Trayecto ${t}</b> <span style="font-size:11px;color:#666">· ${rs.length} tramo(s) · ${cop(cs)}</span>`+
@@ -3148,16 +3148,23 @@ function vcNotaCantidades(){try{const c=vcContrato();if(!c||vcEsMezcla(c))return
 // sello que no entra explicado · presupuesto coherente (naranja = azul) y tramos cercanos solo si la proyección muestra sobrante · elegir contratista en «Más»
 function vcFam(a){a=String(a||'').toLowerCase();return /slurry/.test(a)?'slurry':/microfres/.test(a)?'micro':/sello/.test(a)?'sello':/parcheo|bacheo/.test(a)?'parcheo':/fresad/.test(a)?'fresado':a;}
 function vcInicio(c){c=c||vcContrato()||{};return String(c.fecha_inicio||'').slice(0,10)||(c.anio?c.anio+'-01-01':'');}
+let VC_NF={t:0,n:0};function vcNFichas(){const t=Date.now();if(t-VC_NF.t>3000){VC_NF={t:t,n:Object.keys(FICHA).length};}return VC_NF.n;}
+function vcActa(c){c=c||vcContrato()||{};const f=String(c.fecha_inicio||'').slice(0,10);return /^\d{4}-\d\d-\d\d$/.test(f)?f:'';}
+function vcFin(c){c=c||vcContrato()||{};const f=String(c.fecha_fin||'').slice(0,10);if(/^\d{4}-\d\d-\d\d$/.test(f))return f;const a=vcActa(c);if(!a||!(+c.plazo_meses>0))return '';const d=new Date(a+'T12:00:00');const m=+c.plazo_meses;d.setMonth(d.getMonth()+Math.floor(m));d.setDate(d.getDate()+Math.round((m-Math.floor(m))*30)-1);return d.toISOString().slice(0,10);}
 // una obra de la historia solo cuenta como «hecha» para este contrato si es de su vigencia (antes contaba un slurry de 2025 como hecho del contrato de 2026)
-function vcHechoHist(f,act){const d0=vcInicio();return ((f&&f.hist)||[]).some(z=>vcMismaAct(z[1],act)&&(!d0||String(z[0]||'')>=d0));}
+function vcHechoHist(f,act){const d0=vcInicio().slice(0,4)+'-01-01';return ((f&&f.hist)||[]).some(z=>vcMismaAct(z[1],act)&&(d0.length<10||String(z[0]||'')>=d0));}      // hecho en la vía este año: no se repite
+// …pero solo cuenta como plata de ESTE contrato si se hizo desde el acta de inicio (sin acta cargada cuenta todo lo del año)
+function vcHechoContrato(f,act,c){const a=vcActa(c);if(!a)return false;return ((f&&f.hist)||[]).some(z=>vcMismaAct(z[1],act)&&String(z[0]||'')>=a);}
+// v248 (Erix, 9-nov-2026 21:58: «este contrato es nuevo, con el dinero que se tiene de monto»): obra hecha este año ANTES del acta de inicio (o sin acta todavía) → es de otro contrato: no entra a la lista ni gasta el valor
+function vcHechoPrevio(cod,act,c){const f=FICHA[cod];if(!f||!f.hist)return false;const a=vcActa(c);const d0=vcInicio(c).slice(0,4)+'-01-01';return f.hist.some(z=>vcMismaAct(z[1],act)&&String(z[0]||'')>=d0&&(!a||String(z[0]||'')<a));}
 function vcOmitidoTxt(x){return `<span style="color:#b26a00">${x.act}: lo hace BTS (${x.mot=='cant'?'ya se completó la cantidad de sello del contrato':'el valor del contrato no alcanza; se prioriza el slurry'})</span>`;}
 // lo ejecutado en pesos: lo registrado con sus cantidades reales + lo que figura hecho en la historia y no tiene registro (a la cantidad programada)
 function vcEjecutado(c,prog){const fa=vcFa(c);const pu=act=>{const it=(c.items||[]).find(i=>vcMismaAct(i.actividad,act));return it?+it.precio||0:0;};const con=new Set();const fam={};let g=0;
  (((VERSION&&VERSION.avance_contratos)||{})[c.contrato]||[]).forEach(a=>{g+=(+a.reg||0)*pu(a.act)*fa;if(a.cods)a.cods.forEach(k=>con.add(k+'|'+vcFam(a.act)));else if(+a.reg>0)fam[vcFam(a.act)]=1;});
  try{(REGS||[]).forEach(r=>{if(r.tipo=='obra'&&r.contrato==c.contrato){g+=(+r.cantidad||0)*pu(r.actividad)*fa;con.add(r.codigo+'|'+vcFam(r.actividad));}});}catch(e){}
- (prog||[]).forEach(r=>(r.acts||[]).forEach(x=>{if(x.hecho&&!x.omitido&&!con.has(r.cod+'|'+vcFam(x.act))&&!fam[vcFam(x.act)])g+=(+x.costo||0);}));return g;}
+ (prog||[]).forEach(r=>(r.acts||[]).forEach(x=>{if(x.hecho&&!x.omitido&&!con.has(r.cod+'|'+vcFam(x.act))&&!fam[vcFam(x.act)]&&vcHechoContrato(FICHA[r.cod],x.act,c))g+=(+x.costo||0);}));return g;}
 function vcPorHacer(prog){let p=0;(prog||[]).forEach(r=>(r.acts||[]).forEach(x=>{if(!x.hecho&&!x.omitido)p+=(+x.costo||0);}));return p;}
-function vcDiasFin(c){try{const f=String((c||{}).fecha_fin||'').slice(0,10);if(!f)return null;return Math.ceil((new Date(f+'T23:59:59')-new Date())/864e5);}catch(e){return null;}}
+function vcDiasFin(c){try{const f=vcFin(c);if(!f)return null;return Math.ceil((new Date(f+'T23:59:59')-new Date())/864e5);}catch(e){return null;}}
 function vcPuedeElegir(){try{if(window.CONTRATISTA_APP)return false;const r=(window.rolReal?rolReal():rolActual());return ['administrador','gestor','coordinador_junior','inspector'].includes(r)&&contratosLista().length>1;}catch(e){return false;}}
 function vcElegirContrato(){if(!vcPuedeElegir())return;const cl=contratosLista();const act=localStorage.getItem('pms_contrato')||'';
  masPanel('👷 ¿Qué contratista quiere ver?','<div style="font-size:12px;color:#555;margin:2px 0 6px">Contratos activos. Toque uno y la vista del contratista cambia a ese contrato (mapa, tramos, programación y documentos).</div>'+
@@ -3188,7 +3195,7 @@ function camGiro(){try{const o=CAM.up;if(!o)return 0;const a=(screen.orientation
  vcBloqueSugeridos=function(){try{const S=vcSugeridos(40);const c=vcContrato();if(!c||vcEsMezcla(c))return '';const prog=vcPrograma();if(!prog||!prog.length)return '';const valor=+c.valor||0;S.real=vcEjecutado(c,prog);S.pend=vcPorHacer(prog);const saldo=valor-S.real-S.pend;
    const todo=prog.every(r=>r.hecho);const dias=vcDiasFin(c);const finCerca=dias!=null&&dias<=7;const sobra=saldo>valor*0.01||((todo||finCerca)&&saldo>valor*0.003);
    const cuenta=`Ejecutado ${cop(S.real||0)} + por hacer ${cop(S.pend||0)} = ${cop((S.real||0)+(S.pend||0))} de ${cop(valor)}`;
-   if(!sobra||!S.L.length)return `<div style="background:#fff;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:12px;color:#555">💰 <b>Presupuesto:</b> ${cuenta}. ${saldo>=0?'El contrato queda cubierto con esta lista (diferencia '+cop(saldo)+').':'La lista pasa el valor en '+cop(-saldo)+': los últimos tramos se ajustan.'} Si en la proyección se ve que va a sobrar dinero${dias==null?'':', o en la última semana del contrato'}, aquí aparecerán los tramos más cercanos para seguir.</div>`;
+   if(!sobra||!S.L.length)return `<div style="background:#fff;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:12px;color:#555">💰 <b>Presupuesto:</b> ${cuenta}. ${sobra?'<b>Va a sobrar ≈ '+cop(saldo)+'</b>; revise con BTS qué tramos se agregan.':saldo>=0?'El contrato queda cubierto con esta lista (diferencia '+cop(saldo)+').':'La lista pasa el valor en '+cop(-saldo)+': los últimos tramos se ajustan.'} Si en la proyección se ve que va a sobrar dinero${dias==null?'':', o en la última semana del contrato'}, aquí aparecerán los tramos más cercanos para seguir.</div>`;
    const porq=todo?'ya terminó la lista':(finCerca?`falta${dias==1?'':'n'} ${Math.max(0,dias)} día(s) para terminar el contrato`:'la proyección muestra que va a sobrar');
    return `<div style="border:2px solid #1565c0;border-radius:10px;padding:8px 10px;margin:8px 0;background:#e3f2fd"><div style="font-size:14px;font-weight:bold;color:#1565c0">💰 Va a sobrar presupuesto: ≈ ${cop(Math.max(0,saldo))}</div><div style="font-size:12px;color:#333">${cuenta} (${porq}). Tramos más cercanos a donde terminó (T${esc(S.ref.t)} · PR ${prTxt((FICHA[S.ref.cod]||{}).pri||0)}). <b>Antes de ejecutarlos pida el visto bueno de BTS.</b></div>
    ${S.L.map(x=>`<div onclick="masCerrar();ficha('${x.cod}',true)" style="background:#fff;border-radius:8px;padding:7px 8px;margin-top:6px;font-size:13px;cursor:pointer"><b>T${esc(x.t)} · ${esc(x.cz)}${x.car?' · '+esc(x.car):''} · PR ${prTxt((FICHA[x.cod]||{}).pri||0)}</b> <span style="color:#1565c0">· a ${distTxt(x.m)}</span><br><span style="font-size:12px;color:#444">${x.acts.map(a=>a.act.replace(' (sello + slurry seal)',' seal')+': '+fmt(a.q,1)+' '+a.un).join(' · ')}</span> <span style="float:right;font-size:12px">${cop(x.costo)}</span></div>`).join('')}
@@ -3197,5 +3204,16 @@ function camGiro(){try{const o=CAM.up;if(!o)return 0;const a=(screen.orientation
  const _mp46=masPanel;masPanel=function(titulo,cuerpo){try{if(/Más · contratista/.test(titulo)&&vcPuedeElegir()){cuerpo=String(cuerpo||'').replace('<div style="background:#ef6c00;','<div onclick="vcElegirContrato()" style="cursor:pointer;background:#ef6c00;').replace('</div></div>','</div><div style="font-size:12px;margin-top:4px;text-decoration:underline">▾ Toque aquí para ver otro contratista</div></div>');}}catch(e){}return _mp46(titulo,cuerpo);};
  const _va46=vcAplicar;vcAplicar=function(){const r=_va46.apply(this,arguments);try{const b=$('vcbanda');if(b&&vcActiva()&&vcPuedeElegir()&&!b.querySelector('#vccambiar'))b.insertAdjacentHTML('beforeend',' &nbsp; <span id="vccambiar" onclick="vcElegirContrato()" style="text-decoration:underline;cursor:pointer">cambiar</span>');}catch(e){}return r;};
  try{vcAplicar();}catch(e){}
+})();
+// ================= v247 (Erix, 9-nov-2026, 21:48): slurry siempre con su sello (tramo completo) · fechas del contrato listas: al cargar el acta de inicio en el PC todo se recalcula solo
+(function(){if(DATA!=='Campo')return;
+ try{if(typeof LIVIANAS!=='undefined'&&!LIVIANAS.includes('contratos'))LIVIANAS.push('contratos');}catch(e){}      // los contratos (fechas, valor) también llegan con la publicación rápida de cada hora
+ // el programa se rehace cuando cambian las fechas o el valor del contrato
+ const _vp47=vcPrograma;vcPrograma=function(){const c=vcContrato();const k=c?[c.contrato,vcActa(c),vcFin(c),c.valor,c.plazo_meses,vcNFichas()].join('|'):'';if(VC_PROG&&VC_PROG._k47!==undefined&&VC_PROG._k47!==k){VC_PROG=null;VC_PROG_K='';}const p=_vp47();try{if(p)p._k47=k;}catch(e){}return p;};
+ // nota de fechas en «Tramos a intervenir» y en la programación
+ window.vcNotaFechas=function(){try{const c=vcContrato();if(!c)return '';const a=vcActa(c),f=vcFin(c);const fm=d=>new Date(d+'T12:00:00').toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'});
+   if(!a)return `<div style="background:#fff;border-radius:8px;padding:6px 10px;margin:4px 0;font-size:12px;color:#555">📅 <b>Acta de inicio: pendiente de firma.</b> Las semanas van numeradas (semana 1, 2…). Cuando BTS cargue la fecha del acta, la app pone las fechas reales, el día final (plazo de ${String(c.plazo_meses||'').replace('.',',')} meses) y rehace las cuentas sola. Contrato nuevo: todo su valor se programa en obra por hacer.</div>`;
+   const d=vcDiasFin(c);return `<div style="background:#fff;border-radius:8px;padding:6px 10px;margin:4px 0;font-size:12px;color:#555">📅 <b>Acta de inicio: ${fm(a)}</b>${f?' · termina el <b>'+fm(f)+'</b>'+(d!=null?(d>=0?' · faltan '+d+' día(s)':' · <span style="color:#c62828">plazo vencido hace '+(-d)+' día(s)</span>'):''):''}. Contrato nuevo: lo ejecutado antes del acta no entra en la lista ni gasta su valor.</div>`;}catch(e){return '';}};
+ const _nc47=vcNotaCantidades;vcNotaCantidades=function(){return vcNotaFechas()+_nc47();};
 })();
 </script></body></html>
