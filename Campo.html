@@ -3229,4 +3229,56 @@ function camGiro(){try{const o=CAM.up;if(!o)return 0;const a=(screen.orientation
  const _vl49=vcListado;vcListado=function(){_vl49();try{const v=masCaja();if(!v)return;const caja=[...v.querySelectorAll('div')].find(d=>/^Cantidades que resultan/.test(d.innerText||''));if(!caja)return;
    const b=caja.querySelector('b');const lineas=caja.innerHTML.split('<br>');const cab=lineas.shift();const peso=t=>/microfres/i.test(t)?0:/sello/i.test(t)?1:/slurry/i.test(t)?2:5;lineas.sort((x,y)=>peso(x)-peso(y));caja.innerHTML=[cab].concat(lineas).join('<br>');}catch(e){}};
 })();
+// ================= v252 (Erix, 10-nov-2026, 08:56): inspector y coordinador junior con pantalla sencilla: abre en «Inicio», solo «Inicio», «Mi ubicación» y «Campo por enviar»;
+// el mapa sin «Condición 2026», «Deterioro 2023-2026» ni «Riesgo (modelo predictivo)»; la ficha y las intervenciones Base BC quedan; en Contratos se ven los tramos a intervenir como los ve el contratista
+const RS_OCULTAS=['cond','det','riesgo','cambio','estr','ie','clima'];      // v253: también se quitan las vistas de planeación (cambio 2026→2032, georradar, índice de estado, clima)
+function rsOn(){try{if(vcActiva())return false;const r=rolActual();return r=='inspector'||r=='coordinador_junior';}catch(e){return false;}}
+function rsAplicar(){const on=rsOn();document.body.classList.toggle('rs',on);
+ try{const sel=$('vista');if(sel){[...sel.options].forEach(o=>{if(RS_OCULTAS.includes(o.value)){o.hidden=on;o.disabled=on;}});if(on&&RS_OCULTAS.includes(sel.value)){sel.value='int';try{sel.dispatchEvent(new Event('change'));}catch(e){}try{dibujar();}catch(e){}}}}catch(e){}
+ try{inicioBoton();}catch(e){}}
+function ctrTramos(i){const c=contratosLista()[i];if(!c)return;localStorage.setItem('pms_contrato',c.contrato);localStorage.setItem('pms_contratista',c.contratista||'');VC_PROG=null;VC_PROG_K='';
+ try{vcListado();}catch(e){console.error(e);return;}
+ try{const v=masCaja();if(v&&!v.querySelector('#ctrvolver'))v.firstElementChild.insertAdjacentHTML('beforeend',`<div id="ctrvolver" style="display:flex;gap:6px;margin-top:8px"><button type="button" onclick="ctrMapa(${i})" style="flex:1;border:0;border-radius:8px;padding:11px;background:#ef6c00;color:#fff;font-weight:bold;font-size:13px">🗺 Ver estos tramos en el mapa</button><button type="button" onclick="ctrAvance()" style="flex:1;border:0;border-radius:8px;padding:11px;background:#eceff1;font-size:13px">◀ Volver a contratos</button></div>`);}catch(e){}}
+function ctrMapa(i){const c=contratosLista()[i];if(!c)return;localStorage.setItem('pms_contrato',c.contrato);localStorage.setItem('pms_contratista',c.contratista||'');VC_PROG=null;VC_PROG_K='';localStorage.setItem('pms_vista_contratista','1');window.RS_VOLVER=1;document.body.classList.add('rsvc');
+ masCerrar();try{vcAplicar();}catch(e){}try{vcDibujar();}catch(e){console.error(e);}try{avisoCorto('🗺 Tramos a intervenir de '+(c.contratista||c.contrato)+'. Para volver toque «salir» arriba.');}catch(e){}}
+(function(){if(DATA!=='Campo')return;
+ const css=document.createElement('style');css.textContent='body.rs .gps .fila>button:not(#binicio):not(#bgps):not(#breg){display:none!important} body.rs #asisbar{display:none!important} body.rsvc #bregobra,body.rsvc #bbit,body.rsvc #breg,body.rsvc #bvalidar{display:none!important}';document.head.appendChild(css);
+ // al salir de la vista de tramos del contratista vuelve a su pantalla normal (mapa completo + inicio)
+ const _vs52=vcSalir;vcSalir=function(){const r=_vs52.apply(this,arguments);document.body.classList.remove('rsvc');try{if(window.RS_VOLVER){window.RS_VOLVER=0;try{dibujar();}catch(e){}rsAplicar();setTimeout(()=>{try{inicioRol();}catch(e){}},200);}else rsAplicar();}catch(e){}return r;};
+ // contratos: botón «Tramos a intervenir» en cada contrato
+ const _ca52=ctrAvance;ctrAvance=function(){const r=_ca52.apply(this,arguments);try{const v=masCaja();const cl=contratosLista();if(v)[...v.querySelectorAll('div')].forEach(d=>{const f=d.firstElementChild;if(!f||f.tagName!='DIV'||!/font-size:15px/.test(f.getAttribute('style')||''))return;const k=cl.findIndex(c=>c.contrato==f.textContent);if(k<0||d.querySelector('.ctrtr'))return;
+   f.insertAdjacentHTML('afterend',`<div class="ctrtr" style="display:flex;gap:6px;margin:8px 0 4px"><button type="button" onclick="ctrTramos(${k})" style="flex:1;border:0;border-radius:8px;padding:10px;background:#ef6c00;color:#fff;font-weight:bold;font-size:13px">📋 Tramos a intervenir</button><button type="button" onclick="ctrMapa(${k})" style="flex:1;border:0;border-radius:8px;padding:10px;background:#fff3e0;color:#e65100;font-weight:bold;font-size:13px;border:1px solid #ef6c00">🗺 Verlos en el mapa</button></div>`);});}catch(e){console.error(e);}return r;};
+ // se revisa al cambiar de usuario o de vista, y al abrir la app se muestra «Inicio»
+ const _va52=vcAplicar;vcAplicar=function(){const r=_va52.apply(this,arguments);try{rsAplicar();}catch(e){}return r;};
+ // si el inspector o el coordinador cerró la app viendo los tramos de un contratista, al volver a abrir regresa a su propia pantalla
+ try{if(localStorage.getItem('pms_vista_contratista')=='1'){const u=usuariosDet().find(x=>x.nombre==(localStorage.getItem('pms_usuario')||''));const r=String((u&&u.rol)||'').toLowerCase();if(r=='inspector'||r=='coordinador_junior'){localStorage.removeItem('pms_vista_contratista');try{_va52();}catch(e){}}}}catch(e){}
+ let abierto=false;const abrir=()=>{if(abierto)return;try{if(!rsOn()||!Object.keys(FICHA||{}).length)return;if(document.querySelector('#vclogin,#vcnueva'))return;abierto=true;rsAplicar();inicioRol();}catch(e){}};
+ rsAplicar();[1500,3500,7000,12000].forEach(t=>setTimeout(abrir,t));
+ try{const _ae52=acEntrar;acEntrar=async function(){const ok=await _ae52.apply(this,arguments);try{abierto=false;rsAplicar();[600,1500,3000].forEach(t=>setTimeout(abrir,t));}catch(e){}return ok;};}catch(e){}
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible')rsAplicar();});
+})();
+// ================= v253 (Erix, 10-nov-2026, 09:04: «hacerlas todas»): más simple para inspector y coordinador junior
+// (1) tarjeta «📍 Dónde estoy» · (2) menos vistas en el mapa · (3) sin selector de escenario ni tabla de costos · (4) el mapa abre en su zona · (5) «Reportar daño aquí» en la ficha
+function rsDondeEstoy(){const ir=()=>{const s=seccionCercana(ultimaPos,null,null);if(!s||!s.cod){alert('No encuentro una sección cerca. Revise que el GPS esté activo.');return;}
+  if(s.dist>400){alert('Está a '+Math.round(s.dist)+' m de la vía. Le muestro la sección más cercana.');}masCerrar();try{const q=COORDS[s.cod];if(q)map.setView([(q[0]+q[2])/2,(q[1]+q[3])/2],16);}catch(e){}ficha(s.cod,true);};
+ const fresca=()=>{try{return !!ultimaPos&&(typeof gpsT=='undefined'||!gpsT||Date.now()-gpsT<120000);}catch(e){return !!ultimaPos;}};
+ if(fresca()){ir();return;}
+ try{avisoCorto('📍 Buscando su ubicación…');}catch(e){}try{gps();}catch(e){}let n=0;const t=setInterval(()=>{n++;if(fresca()){clearInterval(t);ir();}else if(n>40){clearInterval(t);alert('No se pudo obtener la ubicación. Active el GPS del celular y toque otra vez «Dónde estoy».');}},500);}
+function rsReportarAqui(cod){const f=FICHA[cod];if(!f)return;repAbrir({g:'pav'});setTimeout(()=>{try{const st=(id,v)=>{const e=$(id);if(!e||v==null)return;const o=[...e.options||[]].find(o=>o.value==v||o.textContent==v||String(o.value).replace(/\s*\(RN.*\)/,'')==String(v).replace(/\s*\(RN.*\)/,''));if(o)e.value=o.value;else if(e.tagName=='INPUT')e.value=v;};
+  st('rept',String(f.t));st('repcz',f.cz);st('repcar',f.car);const pr=$('reppr');if(pr)pr.value=prTxt(+f.pri||0);try{repGrupoSel('pav');}catch(e){}const g=$('repgps');if(g)g.textContent='✓ sección de la ficha: T'+f.t+' · '+f.cz+' · PR '+prTxt(+f.pri||0);}catch(e){console.error(e);}},60);}
+function rsZonaVer(){try{const z=miZona();if(!z||!window.map||!Object.keys(COORDS).length)return false;const B=[];Object.keys(COORDS).forEach(c=>{const f=FICHA[c];if(f&&zonaDe(f.t)==z){const q=COORDS[c];B.push([q[0],q[1]],[q[2],q[3]]);}});if(B.length<2)return false;map.fitBounds(B,{padding:[20,20]});return true;}catch(e){return false;}}
+(function(){if(DATA!=='Campo')return;
+ // (3) el texto «Escenario» y la tabla de costos se ocultan (solo existe el escenario Base BC)
+ try{const e=$('esc');if(e){const sp=document.createElement('span');sp.id='rsesc';const prev=e.previousSibling;e.parentNode.insertBefore(sp,e);if(prev&&prev.nodeType==3&&/Escenario/.test(prev.textContent)){prev.textContent=prev.textContent.replace('Escenario','');sp.appendChild(document.createTextNode('Escenario '));}sp.appendChild(e);}}catch(e){}
+ const css=document.createElement('style');css.textContent='body.rs #rsesc,body.rs #det{display:none!important}';document.head.appendChild(css);
+ // (1) tarjeta «Dónde estoy» de primera en el Inicio
+ const _ir53=inicioRol;inicioRol=function(){const r=_ir53.apply(this,arguments);try{if(!rsOn())return r;const v=masCaja();if(!v||v.querySelector('#rsdonde'))return r;const g=[...v.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g)return r;
+   g.insertAdjacentHTML('afterbegin',`<div id="rsdonde" onclick="rsDondeEstoy()" style="grid-column:1/-1;display:flex;align-items:center;gap:12px;background:#1565c0;color:#fff;border-radius:14px;padding:12px 14px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.15)"><span style="font-size:34px">📍</span><div style="text-align:left"><div style="font-size:15px;font-weight:bold">Dónde estoy</div><div style="font-size:11px;opacity:.9">abre la ficha del sector donde está parado</div></div></div>`);}catch(e){console.error(e);}return r;};
+ // (5) botón en la ficha
+ const _fi53=fichaInterna;fichaInterna=function(cod){const r=_fi53.apply(this,arguments);try{if(!rsOn())return r;const b=$('ficha');if(!b||b.querySelector('#rsrep'))return r;const btn=`<button id="rsrep" type="button" onclick="rsReportarAqui('${String(cod).replace(/'/g,"\\'")}')" style="display:block;width:100%;margin:8px 0;border:0;border-radius:8px;padding:12px;background:#e65100;color:#fff;font-weight:bold;font-size:15px">🚧 Reportar daño aquí</button>`;
+   const h=b.querySelector('h3,h2,b');if(h&&h.parentNode===b)h.insertAdjacentHTML('afterend',btn);else b.insertAdjacentHTML('afterbegin',btn);}catch(e){console.error(e);}return r;};
+ // (4) al abrir la app el mapa se centra en los trayectos de su zona (una vez)
+ let zon=false;[2500,5000,9000,15000].forEach(t=>setTimeout(()=>{if(zon||!rsOn())return;if(rsZonaVer())zon=true;},t));
+ try{rsAplicar();}catch(e){}
+})();
 </script></body></html>
