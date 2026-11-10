@@ -3303,7 +3303,7 @@ function cuInicio(){const u=miUsuario()||{};const nom=localStorage.getItem('pms_
   ${B('cuArreglo()','✅','Hice un arreglo','vio algo, lo arregló sin orden: foto y listo','#2e7d32','#fff','')}
   ${B('cuReportar()','🚧','Reportar un daño','encontró algo que no pudo arreglar','#e65100','#fff','')}
   ${hh?`<div style="text-align:center;font-size:14px;color:#2e7d32;margin:6px 0">✔ Hoy lleva ${hh} arreglo(s) registrado(s)</div>`:''}
-  <div style="font-size:12px;color:#555;margin-top:10px">Lo que registre se envía solo cuando haya señal (📝 abajo dice cuántos faltan por enviar).</div>
+  <div style="font-size:12px;color:#555;margin-top:10px">Órdenes al ${esc(String((VERSION&&VERSION.generado)||'').slice(5).replace('-','/'))}. Lo que registre se envía solo cuando haya señal (📝 abajo dice cuántos faltan por enviar).</div>
   <button type="button" onclick="refrescarLiviano&&refrescarLiviano(true)" style="width:100%;margin-top:8px;border:1px solid #004d61;border-radius:10px;padding:11px;background:#fff;color:#004d61;font-size:14px">🔄 Buscar órdenes nuevas</button>`);}
 // reporte de daño sin arreglar = el mismo del inspector (crea orden), sin elegir gravedad complicada
 function cuReportar(){CU_ARR=null;repAbrir({g:'pav'});try{const v=masCaja();const ot=$('repot');if(ot){ot.checked=true;const l=ot.closest('label');if(l)l.style.display='none';}}catch(e){}}
@@ -3319,7 +3319,7 @@ function cuArreglo(){CU_ARR={};repAbrir({g:'pav'});try{const v=masCaja();const h
   const bt=[...v.querySelectorAll('button')].find(b=>/Guardar|Enviar/.test(b.textContent)&&/repGuardar/.test(b.getAttribute('onclick')||''));if(bt){bt.textContent='💾 Guardar el arreglo';bt.style.background='#2e7d32';}}catch(e){console.error(e);}}
 function cuActs(){const s=$('cuact');if(!s)return;const k=(REP&&REP.g)||'pav';s.innerHTML=(OT_ACTS[k]||OT_ACTS.obr||[]).concat(['Otra (escríbala en el detalle)']).map(a=>`<option>${esc(a)}</option>`).join('');}
 (function(){if(DATA!=='Campo')return;
- const css=document.createElement('style');css.textContent='body.cu .gps .fila>button:not(#binicio):not(#breg){display:none!important} body.cu #asisbar,body.cu #fbar,body.cu #ficha,body.cu #pbody,body.cu #ptog{display:none!important}';document.head.appendChild(css);
+ const css=document.createElement('style');css.textContent='body.cu .gps .fila>button:not(#binicio):not(#breg):not(#bgps){display:none!important} body.cu #asisbar,body.cu #fbar,body.cu #ficha,body.cu #pbody,body.cu #ptog{display:none!important}';document.head.appendChild(css);
  try{const t=[...document.querySelectorAll('span')].find(x=>/filtros/.test(x.textContent)&&/togglePanel/.test(x.getAttribute('onclick')||''));if(t)t.id='ptog';}catch(e){}
  // sin fichas para la cuadrilla
  const _f55=ficha;ficha=function(){if(cuOn())return;return _f55.apply(this,arguments);};
@@ -3404,5 +3404,12 @@ function avActivar(){if(!('Notification' in window)){alert('Este celular no perm
  // cada minuto mientras la app esté abierta, y al volver a ella
  setTimeout(()=>avPedir(),4000);setInterval(()=>{if(document.visibilityState=='visible')avPedir();},60000);
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible')avPedir();});
+})();
+// ================= v258 (Erix, 10-nov-2026, 13:34): «Buscar órdenes nuevas» repinta el Inicio y el mapa de la cuadrilla con lo que llegó
+// y, si la bandeja en la nube todavía no tiene los avisos (Codigo.gs viejo), deja de preguntar cada minuto (pregunta cada 10 min por si ya se actualizó).
+(function(){if(DATA!=='Campo')return;
+ const _rl58=window.refrescarLiviano;window.refrescarLiviano=refrescarLiviano=function(){const r=_rl58.apply(this,arguments);Promise.resolve(r).then(()=>{try{if(cuOn()){cuDibujar();const v=masCaja();if(v&&getComputedStyle(v).display!='none'&&/Inicio/.test(v.innerText.slice(0,40)))cuInicio();}}catch(e){}});return r;};
+ let sinAvisos=0;const _ap58=avPedir;avPedir=function(manual){if(!manual&&sinAvisos&&Date.now()-sinAvisos<10*60000)return Promise.resolve(0);
+   return fetchT(SRV+'?accion=avisos&desde=x',{cache:'no-store',redirect:'follow'},20000).then(r=>r.json()).then(j=>{if(j&&j.ok===false&&j.error=='accion'){sinAvisos=Date.now();return 0;}sinAvisos=0;return _ap58(manual);}).catch(()=>_ap58(manual));};
 })();
 </script></body></html>
