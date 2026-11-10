@@ -2788,7 +2788,7 @@ const GRUPOS=[
 const grupoK=k=>GRUPOS.find(g=>g.k==k)||GRUPOS[0];
 function grupoDe(d){return GRUPOS.find(g=>g.f(d))||GRUPOS[GRUPOS.length-1];}
 function miUsuario(){try{return (typeof acSesionValida==='function'&&acSesionValida())||usuariosDet().find(x=>x.nombre==(localStorage.getItem('pms_usuario')||''))||null;}catch(e){return null;}}
-function miZona(){const u=miUsuario();return (u&&u.zona)||'';}
+function miZona(){const u=miUsuario();const z=String((u&&u.zona)||'').trim();return /^(ambos|ambas|todas|todos)$/i.test(z)?'':z;}      // v254: «Ambos» = la cuadrilla atiende los dos departamentos (ve toda la vía)
 function zonaDe(t){const Z=(VERSION&&VERSION.zonas)||{};t=String(t||'');return Z[t]||Z[t.replace(/\s*\(RN.*\)/,'')]||'';}
 function enMiZona(t){const z=miZona();const zt=zonaDe(t);return !z||!zt||z==zt||ROL_TODO;}
 let ROL_TODO=false;      // «ver todas las zonas» (el coordinador puede destaparlo)
@@ -3280,5 +3280,13 @@ function rsZonaVer(){try{const z=miZona();if(!z||!window.map||!Object.keys(COORD
  // (4) al abrir la app el mapa se centra en los trayectos de su zona (una vez)
  let zon=false;[2500,5000,9000,15000].forEach(t=>setTimeout(()=>{if(zon||!rsOn())return;if(rsZonaVer())zon=true;},t));
  try{rsAplicar();}catch(e){}
+})();
+// ================= v254 (Erix, 10-nov-2026, 11:03): la cuadrilla entra con su NOMBRE (sin correo), p. ej. «Cuadrilla Boyacá» + clave
+function acNorm(t){return String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();}
+(function(){if(DATA!=='Campo')return;
+ const _uc54=vcUsuarioCorreo;vcUsuarioCorreo=function(correo){const u=_uc54(correo);if(u||!correo||/@/.test(correo))return u;const k=acNorm(correo);
+   return usuariosDet().find(x=>x.correo&&x.clave_hash&&(acNorm(x.correo)==k||(!/@/.test(String(x.correo))&&acNorm(x.nombre)==k)))||null;};      // solo cuentas con identificador y clave
+ const _ae54=acEntrar;acEntrar=function(correo,clave){try{if(correo&&!/@/.test(correo)){const u=vcUsuarioCorreo(correo);if(u&&u.correo)correo=u.correo;}}catch(e){}return _ae54.call(this,correo,clave);};
+ const _lp54=vcLoginPantalla;vcLoginPantalla=function(){const r=_lp54.apply(this,arguments);try{const c=$('vccorreo');if(c){c.placeholder='Correo (cuadrillas: su nombre, ej. Cuadrilla Boyacá)';c.setAttribute('type','text');c.setAttribute('autocapitalize','off');}}catch(e){}return r;};
 })();
 </script></body></html>
