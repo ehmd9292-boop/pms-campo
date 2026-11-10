@@ -3289,4 +3289,50 @@ function acNorm(t){return String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').
  const _ae54=acEntrar;acEntrar=function(correo,clave){try{if(correo&&!/@/.test(correo)){const u=vcUsuarioCorreo(correo);if(u&&u.correo)correo=u.correo;}}catch(e){}return _ae54.call(this,correo,clave);};
  const _lp54=vcLoginPantalla;vcLoginPantalla=function(){const r=_lp54.apply(this,arguments);try{const c=$('vccorreo');if(c){c.placeholder='Correo (cuadrillas: su nombre, ej. Cuadrilla Boyacá)';c.setAttribute('type','text');c.setAttribute('autocapitalize','off');}}catch(e){}return r;};
 })();
+// ================= v255 (Erix, 10-nov-2026, 11:33): rol CUADRILLA muy simple: solo ejecutar. Abre en su Inicio con 3 botones grandes:
+// «Órdenes por hacer» (de inspectores y coordinadores; marcar hecha con foto), «Hice un arreglo» (lo que vieron y arreglaron sin orden) y «Reportar un daño» (lo que no pudieron arreglar).
+// Sin fichas, sin filtros, sin el resto de botones.
+function cuOn(){try{return !vcActiva()&&rolActual()=='campo';}catch(e){return false;}}
+let CU_ARR=null;
+function cuAplicar(){const on=cuOn();document.body.classList.toggle('cu',on);try{if(on&&$('ficha'))$('ficha').style.display='none';}catch(e){}}
+function cuHechasHoy(){try{const yo=localStorage.getItem('pms_usuario')||'';const h=_hoyLocal();return registros().filter(r=>r.usuario==yo&&String(r.fecha||'').slice(0,10)==h&&((r.tipo=='orden'&&r.evento=='hecha')||(r.tipo=='nota'&&r.elemento&&r.elemento.hecho))).length;}catch(e){return 0;}}
+function cuInicio(){const u=miUsuario()||{};const nom=localStorage.getItem('pms_usuario')||'';const n=(typeof otMias=='function')?otMias().length:0;const hh=cuHechasHoy();
+ const B=(fn,ico,t,sub,bg,col,badge)=>`<div onclick="${fn}" style="position:relative;display:flex;align-items:center;gap:14px;background:${bg};color:${col};border-radius:16px;padding:18px 16px;margin:10px 0;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.15)"><span style="font-size:44px">${ico}</span><div style="text-align:left;flex:1"><div style="font-size:19px;font-weight:bold">${t}</div><div style="font-size:13px;opacity:.9">${sub}</div></div>${badge?`<span style="background:#c62828;color:#fff;border-radius:14px;padding:3px 11px;font-size:17px;font-weight:bold">${badge}</span>`:''}</div>`;
+ masPanel('🏠 Inicio',`<div style="background:#004d61;color:#fff;border-radius:12px;padding:12px 14px"><div style="font-size:19px;font-weight:bold">${esc(nom)}</div><div style="font-size:13px;opacity:.9">${esc(u.cargo||'Cuadrilla de mantenimiento')}</div></div>
+  ${B("otLista('cuadrilla')",'🛠','Órdenes por hacer',n?'toque para ver dónde y qué arreglar':'no tiene órdenes pendientes','#fff','#222',n||'')}
+  ${B('cuArreglo()','✅','Hice un arreglo','vio algo, lo arregló sin orden: foto y listo','#2e7d32','#fff','')}
+  ${B('cuReportar()','🚧','Reportar un daño','encontró algo que no pudo arreglar','#e65100','#fff','')}
+  ${hh?`<div style="text-align:center;font-size:14px;color:#2e7d32;margin:6px 0">✔ Hoy lleva ${hh} arreglo(s) registrado(s)</div>`:''}
+  <div style="font-size:12px;color:#555;margin-top:10px">Lo que registre se envía solo cuando haya señal (📝 abajo dice cuántos faltan por enviar).</div>
+  <button type="button" onclick="refrescarLiviano&&refrescarLiviano(true)" style="width:100%;margin-top:8px;border:1px solid #004d61;border-radius:10px;padding:11px;background:#fff;color:#004d61;font-size:14px">🔄 Buscar órdenes nuevas</button>`);}
+// reporte de daño sin arreglar = el mismo del inspector (crea orden), sin elegir gravedad complicada
+function cuReportar(){CU_ARR=null;repAbrir({g:'pav'});try{const v=masCaja();const ot=$('repot');if(ot){ot.checked=true;const l=ot.closest('label');if(l)l.style.display='none';}}catch(e){}}
+// arreglo propio: el mismo formulario + «¿Qué hizo?»; llega al PC como orden YA HECHA para que el coordinador la revise y cierre
+function cuArreglo(){CU_ARR={};repAbrir({g:'pav'});try{const v=masCaja();const h=v.querySelector('div');if(h&&/Reportar/.test(h.innerHTML))h.innerHTML=h.innerHTML.replace(/🚧 Reportar daño o novedad/,'✅ Hice un arreglo');
+  [...v.querySelectorAll('div')].forEach(d=>{if(d.children.length==0&&/^El reporte llega/.test(d.textContent))d.textContent='Cuente qué arregló: llega al coordinador para revisarlo y cerrarlo, y queda en el sistema del PC.';
+   if(d.children.length==0&&/^3\. ¿Qué encontró\?/.test(d.textContent))d.textContent='3. ¿Qué daño tenía?';if(d.children.length==0&&/^4\. ¿Qué tan grave/.test(d.textContent)){d.style.display='none';const n=d.nextElementSibling;if(n)n.style.display='none';}
+   if(d.children.length==0&&/^5\. Foto/.test(d.textContent))d.textContent='5. Foto de cómo quedó';});
+  const ot=$('repot');if(ot){ot.checked=true;const l=ot.closest('label');if(l)l.style.display='none';}
+  const ancla=$('repobs');if(ancla)ancla.insertAdjacentHTML('afterend',`<div style="font-size:13px;font-weight:bold;margin:12px 0 4px">4. ¿Qué hizo?</div><select id="cuact" style="width:100%;font-size:15px;padding:9px"></select>
+   <div style="display:flex;gap:6px;margin-top:6px"><input id="cucant" type="number" inputmode="decimal" step="any" placeholder="Cantidad (opcional)" style="flex:2;font-size:15px;padding:9px"><select id="cuun" style="flex:1;font-size:15px;padding:9px">${['un','m','m²','m³','ml','kg','h'].map(u=>`<option>${u}</option>`).join('')}</select></div>`);
+  cuActs();[...v.querySelectorAll('.repg')].forEach(b=>b.addEventListener('click',()=>setTimeout(cuActs,0)));
+  const bt=[...v.querySelectorAll('button')].find(b=>/Guardar|Enviar/.test(b.textContent)&&/repGuardar/.test(b.getAttribute('onclick')||''));if(bt){bt.textContent='💾 Guardar el arreglo';bt.style.background='#2e7d32';}}catch(e){console.error(e);}}
+function cuActs(){const s=$('cuact');if(!s)return;const k=(REP&&REP.g)||'pav';s.innerHTML=(OT_ACTS[k]||OT_ACTS.obr||[]).concat(['Otra (escríbala en el detalle)']).map(a=>`<option>${esc(a)}</option>`).join('');}
+(function(){if(DATA!=='Campo')return;
+ const css=document.createElement('style');css.textContent='body.cu .gps .fila>button:not(#binicio):not(#breg){display:none!important} body.cu #asisbar,body.cu #fbar,body.cu #ficha,body.cu #pbody,body.cu #ptog{display:none!important}';document.head.appendChild(css);
+ try{const t=[...document.querySelectorAll('span')].find(x=>/filtros/.test(x.textContent)&&/togglePanel/.test(x.getAttribute('onclick')||''));if(t)t.id='ptog';}catch(e){}
+ // sin fichas para la cuadrilla
+ const _f55=ficha;ficha=function(){if(cuOn())return;return _f55.apply(this,arguments);};
+ // su Inicio propio
+ const _ir55=inicioRol;inicioRol=function(){if(cuOn())return cuInicio();return _ir55.apply(this,arguments);};
+ // al guardar «Hice un arreglo»: el registro lleva hecho + actividad + cantidad
+ const _sr55=setRegistros;setRegistros=function(r){try{if(CU_ARR&&r&&r.length){const x=r[r.length-1];if(x&&x.tipo=='nota'&&x.elemento&&x.elemento.reporte&&!x.elemento.hecho){const a=$('cuact')?$('cuact').value:'';const obs=$('repobs')?$('repobs').value.trim():'';const c=$('cucant')?$('cucant').value:'';
+    x.elemento=Object.assign({},x.elemento,{orden:1,hecho:1,actividad:/^Otra/.test(a)?obs:a,cantidad:c===''?'':+c,unidad:c===''?'':($('cuun')?$('cuun').value:''),cuadrilla:x.usuario});x.observacion=String(x.observacion||'').replace('[Reporte de inspección','[Arreglo hecho por la cuadrilla').replace(/ \(gravedad [a-z]+\)$/,'');}}}catch(e){console.error(e);}return _sr55.apply(this,arguments);};
+ const _rg55=repGuardar;repGuardar=function(){if(CU_ARR){const a=$('cuact')?$('cuact').value:'';if(/^Otra/.test(a)&&!($('repobs')&&$('repobs').value.trim())){alert('Escriba en el detalle qué arreglo hizo.');return;}
+   const _al=window.alert;window.alert=m=>_al(/^Reporte guardado/.test(String(m))?'Arreglo guardado. Llega al coordinador para revisarlo y cerrarlo. Se envía solo cuando haya señal.':m);try{return _rg55.apply(this,arguments);}finally{window.alert=_al;CU_ARR=null;}}
+  return _rg55.apply(this,arguments);};
+ const _va55=vcAplicar;vcAplicar=function(){const r=_va55.apply(this,arguments);try{cuAplicar();}catch(e){}return r;};
+ const _ae55=acEntrar;acEntrar=async function(){const ok=await _ae55.apply(this,arguments);try{cuAplicar();if(ok&&cuOn())setTimeout(()=>{try{cuInicio();}catch(e){}},700);}catch(e){}return ok;};
+ cuAplicar();let ab=false;[1500,3500,7000,12000].forEach(t=>setTimeout(()=>{if(ab||!cuOn()||document.querySelector('#vclogin,#vcnueva'))return;ab=true;cuAplicar();try{cuInicio();}catch(e){}},t));
+})();
 </script></body></html>
