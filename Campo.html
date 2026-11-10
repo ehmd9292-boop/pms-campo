@@ -2278,7 +2278,7 @@ function vcSalirCorreo(){localStorage.removeItem('pms_vista_contratista');localS
 // contrato dando prioridad al SLURRY SEAL (puede pasarse de la cantidad contratada); el sello de fisuras va hasta su cantidad contratada y lo
 // que sobre de dinero se usa en sello de los tramos restantes. Bitácora: los selectores dicen Trayecto / Calzada / Carril.
 var VC_FILTRO={t:'',k:'',e:''};
-const VC_FASE={1:'microfresado + sello + slurry',2:'slurry seal (+ sello)',3:'solo sello de fisuras'};
+const VC_FASE={1:'microfresado + sello + slurry',2:'sello de fisuras y luego slurry seal',3:'solo sello de fisuras'};
 function vcCzCar(cod){const f=FICHA[cod]||{};if(f.cz||f.car)return [f.cz||'',f.car||''];const p=String(cod).split('-');return p.length>=3?[p[1],p[2]]:['',''];}
 const _vcProg5=vcPrograma;vcPrograma=function(){vcContratoAuto();const c=vcContrato();if(!c)return [];const key='v231|'+VC_MICRO_ANIOS+'|'+c.contrato+'|'+Object.keys(DATOS).join(',')+'|'+(c.items||[]).length;if(VC_PROG&&VC_PROG_K==key)return VC_PROG;
  const esc=DATOS['Base BC']?'Base BC':Object.keys(DATOS)[0];if(!esc)return [];const anios=Object.keys(DATOS[esc]).map(Number).sort((a,b)=>a-b);const aMicro=anios[0]+VC_MICRO_ANIOS-1;
@@ -2319,7 +2319,7 @@ function vcListado(){vcContratoAuto();const c=vcContrato();if(!c){alert('No hay 
  const cant=Object.keys(it).map(a=>{const cap=it[a].cap,q=u[a]||0;return `${a.replace(' (sello + slurry seal)',' seal')}: <b>${fmt(q,0)}</b> ${it[a].un}${cap?' de '+fmt(cap,0)+(q>cap*1.02?' <span style="color:#b26a00">(pasa la cantidad contratada; manda el valor del contrato)</span>':''):''}`;}).join('<br>');
  let h=`<div style="background:#ef6c00;color:#fff;border-radius:8px;padding:8px 10px;margin:4px 0 8px"><b style="font-size:13px">${c.contratista||''} · ${c.contrato}</b><div style="font-size:11px;opacity:.95">${prog.length} tramos a intervenir · ${cop(tot)} de ${cop(+c.valor||0)} (con AIU e IVA) · ${hechos} ya registrados</div></div>
  <div style="background:#fff;border-radius:8px;padding:6px 10px;margin:4px 0;font-size:12px"><b>Cantidades que resultan</b><br>${cant}</div>
- <div style="font-size:11px;color:#666;margin:2px 0 4px">Prioridad: microfresado del primer año del plan, luego slurry seal con su sello de fisuras (el tramo entra completo; las cantidades pueden pasar las contratadas, el límite es el valor del contrato) y, si queda dinero, tramos de solo sello. Orden por trayecto, calzada, carril y PR. Toque un tramo para abrir su ficha y registrar.</div>`+vcFiltroHtml(prog,'lista');
+ <div style="font-size:11px;color:#666;margin:2px 0 4px">Prioridad: microfresado del primer año del plan, luego sello de fisuras y slurry seal (el sello siempre se hace antes del slurry; el tramo entra completo; las cantidades pueden pasar las contratadas, el límite es el valor del contrato) y, si queda dinero, tramos de solo sello. Aquí solo aparece lo que falta por hacer. Orden por trayecto, calzada, carril y PR. Toque un tramo para abrir su ficha y registrar.</div>`+vcFiltroHtml(prog,'lista');
  const porT={};sel.forEach(r=>{(porT[r.t]=porT[r.t]||[]).push(r);});const tN=t_=>parseFloat(String(t_).replace(/[^\d.]/g,''))||0;
  h+=`<div style="font-size:11px;color:#444;margin:2px 0">${sel.length} tramo(s) en la lista · ${cop(sel.reduce((s,r)=>s+r.costo,0))}</div>`;
  Object.keys(porT).sort((a,b)=>tN(a)-tN(b)||a.localeCompare(b)).forEach(t=>{const rs=porT[t];const cs=rs.reduce((x,r)=>x+r.costo,0);h+=`<div style="background:#fff;border-radius:8px;padding:6px 10px;margin:5px 0"><b style="font-size:13px">Trayecto ${t}</b> <span style="font-size:11px;color:#666">· ${rs.length} tramo(s) · ${cop(cs)}</span>`+
@@ -3190,7 +3190,7 @@ function camGiro(){try{const o=CAM.up;if(!o)return 0;const a=(screen.orientation
    try{if(CAM.simple){const pv=$('campre');const t=pv&&pv.querySelector('div');if(t&&/ngulo/.test(t.textContent))t.textContent='¿Quedó bien la foto?';}}catch(e){}}};
  // ---- (3) nota: por qué en algunos tramos el sello lo hace BTS
  const _nc46=vcNotaCantidades;vcNotaCantidades=function(){let h=_nc46();try{const c=vcContrato();const prog=vcPrograma();let n=0,ml=0;prog.forEach(r=>r.acts.forEach(x=>{if(x.omitido){n++;ml+=(+x.q||0);}}));
-   if(n){const cap=+(((c.items||[]).find(i=>/sello de fis/i.test(i.actividad))||{}).cantidad)||0;h+=`<div style="background:#fff8e1;border:1px solid #ffca28;border-radius:8px;padding:6px 10px;margin:4px 0;font-size:12px"><b>¿Por qué en ${n} tramo(s) dice «Sello de fisuras: lo hace BTS»?</b> Con la relación de 1 ml por m² el sello que se necesita es más del que cabe: el contrato tiene ${fmt(cap,0)} ml de sello y un valor fijo, y la app le da prioridad al slurry. En esos tramos el contratista hace el slurry y los ${fmt(ml,0)} ml de sello quedan para la cuadrilla de BTS.</div>`;}}catch(e){}return h;};
+   if(n&&false){const cap=+(((c.items||[]).find(i=>/sello de fis/i.test(i.actividad))||{}).cantidad)||0;h+=`<div style="background:#fff8e1;border:1px solid #ffca28;border-radius:8px;padding:6px 10px;margin:4px 0;font-size:12px"><b>¿Por qué en ${n} tramo(s) dice «Sello de fisuras: lo hace BTS»?</b> Con la relación de 1 ml por m² el sello que se necesita es más del que cabe: el contrato tiene ${fmt(cap,0)} ml de sello y un valor fijo, y la app le da prioridad al slurry. En esos tramos el contratista hace el slurry y los ${fmt(ml,0)} ml de sello quedan para la cuadrilla de BTS.</div>`;}}catch(e){}return h;};
  // ---- (4) bloque de presupuesto: una sola cuenta (ejecutado + por hacer); el azul solo sale si la proyección muestra que sobra, o en la última semana, o al terminar
  vcBloqueSugeridos=function(){try{const S=vcSugeridos(40);const c=vcContrato();if(!c||vcEsMezcla(c))return '';const prog=vcPrograma();if(!prog||!prog.length)return '';const valor=+c.valor||0;S.real=vcEjecutado(c,prog);S.pend=vcPorHacer(prog);const saldo=valor-S.real-S.pend;
    const todo=prog.every(r=>r.hecho);const dias=vcDiasFin(c);const finCerca=dias!=null&&dias<=7;const sobra=saldo>valor*0.01||((todo||finCerca)&&saldo>valor*0.003);
@@ -3215,5 +3215,20 @@ function camGiro(){try{const o=CAM.up;if(!o)return 0;const a=(screen.orientation
    if(!a)return `<div style="background:#fff;border-radius:8px;padding:6px 10px;margin:4px 0;font-size:12px;color:#555">📅 <b>Acta de inicio: pendiente de firma.</b> Las semanas van numeradas (semana 1, 2…). Cuando BTS cargue la fecha del acta, la app pone las fechas reales, el día final (plazo de ${String(c.plazo_meses||'').replace('.',',')} meses) y rehace las cuentas sola. Contrato nuevo: todo su valor se programa en obra por hacer.</div>`;
    const d=vcDiasFin(c);return `<div style="background:#fff;border-radius:8px;padding:6px 10px;margin:4px 0;font-size:12px;color:#555">📅 <b>Acta de inicio: ${fm(a)}</b>${f?' · termina el <b>'+fm(f)+'</b>'+(d!=null?(d>=0?' · faltan '+d+' día(s)':' · <span style="color:#c62828">plazo vencido hace '+(-d)+' día(s)</span>'):''):''}. Contrato nuevo: lo ejecutado antes del acta no entra en la lista ni gasta su valor.</div>`;}catch(e){return '';}};
  const _nc47=vcNotaCantidades;vcNotaCantidades=function(){return vcNotaFechas()+_nc47();};
+})();
+// ================= v249 (Erix, 9-nov-2026, 22:23): contrato de Lápiz: el sello de fisuras SIEMPRE antes del slurry (nunca «lo hace BTS» por ahora) · solo se muestra lo que falta por hacer
+(function(){if(DATA!=='Campo')return;
+ // los tramos «ya intervenidos, falta el slurry» no entran al programa de este contrato (el valor se llena con obra nueva); Erix dirá si ese slurry es de Lápiz
+ const _sp49=vcSlurryPendiente;vcSlurryPendiente=function(){try{const c=vcContrato();if(c&&!vcEsMezcla(c))return [];}catch(e){}return _sp49.apply(this,arguments);};
+ const ORD={sello:1,slurry:2,micro:0};const ordAct=(a,b)=>(ORD[vcFam(a.act)]??5)-(ORD[vcFam(b.act)]??5);
+ const _vp49=vcPrograma;vcPrograma=function(){const c=vcContrato();const prog=_vp49();if(!c||!prog||prog.mezcla||prog._v49)return prog;
+  const res=[];let gasto=0;const usado={};
+  prog.forEach(r=>{if(r.slurry_pend)return;      // tramos ya intervenidos (microfresado y sello hechos, falta el slurry): no se muestran; Erix dirá si ese slurry es de este contrato
+   const acts=(r.acts||[]).filter(x=>!x.hecho&&!x.omitido).sort(ordAct);if(!acts.length)return;      // lo ya hecho no se muestra: solo lo que falta
+   const t=Object.assign({},r,{acts:acts,costo:acts.reduce((s,x)=>s+(+x.costo||0),0),hecho:false});gasto+=t.costo;acts.forEach(x=>{usado[x.act]=(usado[x.act]||0)+x.q;});res.push(t);});
+  ['items','fa','aMicro','_k47','_rel','_ctr','v234'].forEach(k=>{res[k]=prog[k];});res.usado=usado;res.gasto=gasto;res.n_pend=0;res.pend_m2=0;res._v49=true;VC_PROG=res;return res;};
+ // «Cantidades que resultan» en el orden de ejecución: microfresado, sello, slurry
+ const _vl49=vcListado;vcListado=function(){_vl49();try{const v=masCaja();if(!v)return;const caja=[...v.querySelectorAll('div')].find(d=>/^Cantidades que resultan/.test(d.innerText||''));if(!caja)return;
+   const b=caja.querySelector('b');const lineas=caja.innerHTML.split('<br>');const cab=lineas.shift();const peso=t=>/microfres/i.test(t)?0:/sello/i.test(t)?1:/slurry/i.test(t)?2:5;lineas.sort((x,y)=>peso(x)-peso(y));caja.innerHTML=[cab].concat(lineas).join('<br>');}catch(e){}};
 })();
 </script></body></html>
