@@ -3412,4 +3412,109 @@ function avActivar(){if(!('Notification' in window)){alert('Este celular no perm
  let sinAvisos=0;const _ap58=avPedir;avPedir=function(manual){if(!manual&&sinAvisos&&Date.now()-sinAvisos<10*60000)return Promise.resolve(0);
    return fetchT(SRV+'?accion=avisos&desde=x',{cache:'no-store',redirect:'follow'},20000).then(r=>r.json()).then(j=>{if(j&&j.ok===false&&j.error=='accion'){sinAvisos=Date.now();return 0;}sinAvisos=0;return _ap58(manual);}).catch(()=>_ap58(manual));};
 })();
+// ================= v259 (Erix, 10-nov-2026, 14:28):
+// (1) el arreglo que hace la cuadrilla llega al INSPECTOR que lo reportó (o a los inspectores si fue arreglo propio) para «Quedó bien / Devolver»
+//     y al COORDINADOR JUNIOR de ese departamento para cerrarlo; a los dos les suena el aviso al instante.
+// (2) en el reporte: «¿Quién lo arregla?» cuadrilla, contratista VyS o Corseing (demarcación y pintura); la orden se les asigna sola cuando exista su contrato.
+// (3) botón «Infraestructura»: hallazgos y actividades en áreas de servicio, peajes y básculas.
+const EJ_OPC=[['cuadrilla','🛠 Cuadrilla de BTS'],['VyS','🎨 Contratista VyS (demarcación y pintura)'],['Corseing','🎨 Contratista Corseing (demarcación y pintura)']];
+function ejNombre(k){const x=EJ_OPC.find(e=>e[0]==k);return x?x[1].replace(/^\S+\s/,''):k;}
+const INFRA_SITIOS=[{g:'Áreas de servicio',t:'area',L:[['Área de servicio Briceño','Cundinamarca'],['Área de servicio Chocontá','Cundinamarca'],['Área de servicio Paipa','Boyacá']]},
+ {g:'Peajes',t:'peaje',L:[['Peaje El Roble','Cundinamarca'],['Peaje Albarracín','Boyacá'],['Peaje Tuta','Boyacá']]},
+ {g:'Básculas',t:'bascula',L:[['Báscula Roble Sur','Cundinamarca'],['Báscula Roble Norte','Cundinamarca'],['Báscula Tuta Sur','Boyacá'],['Báscula Tuta Norte','Boyacá']]}];
+const INFRA_CAT=['Cubierta y techos','Baños y redes hidráulicas','Eléctrico e iluminación','Pintura y fachadas','Pisos y andenes','Puertas, ventanas y vidrios','Cerramientos y rejas','Señalización interna','Equipos (báscula, cabinas, barreras)','Aseo y zonas verdes','Otro'];
+GRUPOS.push({k:'infra',ico:'🏢',n:'Infraestructura (áreas de servicio, peajes y básculas)',f:()=>false,def:INFRA_CAT});
+OT_ACTS.infra=['Reparación locativa','Pintura','Limpieza y aseo','Reparación eléctrica o de iluminación','Reparación hidráulica o de baños','Cambio de vidrios, puertas o cerraduras','Mantenimiento de báscula o equipos','Rocería y jardinería'];
+function sinInfra(fn){return function(){const k=GRUPOS.findIndex(g=>g.k=='infra');const g=k>=0?GRUPOS.splice(k,1)[0]:null;try{return fn.apply(this,arguments);}finally{if(g)GRUPOS.push(g);}};}
+function enMiZonaO(o){const z=miZona();const zt=o.z||zonaDe(o.t);return !z||!zt||z==zt||ROL_TODO;}
+function inspectores(){try{return usuariosDet().filter(u=>String(u.rol||'').toLowerCase()=='inspector').map(u=>u.nombre);}catch(e){return [];}}
+function otPorVerificar(){const yo=localStorage.getItem('pms_usuario')||'';const I=inspectores();return ordenes().filter(o=>o.est=='hecha'&&!o.vpor&&(o.rep==yo||!I.includes(o.rep)));}
+function otDelContratista(){try{const c=vcContrato();if(!c)return [];const k=acNorm(c.contratista);return ordenes().filter(o=>o.ej&&(o.est=='abierta'||o.est=='revisada')&&(o.ctr==c.contrato||(k&&k.includes(acNorm(o.ej)))));}catch(e){return [];}}
+function otVerificar(id){const obs=prompt('Observación (opcional)')||'';const yo=localStorage.getItem('pms_usuario')||'';ordenEvento(id,'verificar',{observacion:obs.trim()},{vpor:yo,vf:ahoraLocal(),vobs:obs.trim()});otLista('verificar');}
+// ---------- infraestructura
+let INF={tipo:'hallazgo',cat:new Set(),grav:'media'};
+function infraAbrir(){INF={tipo:'hallazgo',cat:new Set(),grav:'media'};ROL_FOTOS=[];window.MA_EXTRA=null;try{if(typeof watch=='undefined'||watch==null)gps();}catch(e){}
+ const T=t=>`<div style="font-size:13px;font-weight:bold;margin:12px 0 4px">${t}</div>`;const chip=(x,i)=>`<button type="button" class="infc" data-i="${i}" onclick="infraCat(${i})" style="border:1px solid #bbb;border-radius:16px;padding:8px 12px;margin:3px;background:#fff;font-size:13px">${esc(x)}</button>`;
+ masPanel('🏢 Infraestructura',`<div style="font-size:12px;color:#555;margin:4px 0">Áreas de servicio, peajes y básculas. Lo que reporte llega al coordinador del departamento y, si hay que arreglar, se vuelve orden de trabajo.</div>
+  ${T('1. ¿Dónde?')}<select id="infsitio" style="width:100%;font-size:16px;padding:10px"><option value="">Elija el sitio…</option>${INFRA_SITIOS.map(g=>`<optgroup label="${g.g}">${g.L.map(x=>`<option value="${esc(x[0])}" data-z="${x[1]}" data-t="${g.t}">${esc(x[0])} · ${x[1]}</option>`).join('')}</optgroup>`).join('')}</select>
+  ${T('2. ¿Qué va a registrar?')}<div style="display:flex;gap:6px"><button type="button" id="inft_h" onclick="infraTipo('hallazgo')" style="flex:1;border:0;border-radius:10px;padding:13px 6px;font-weight:bold;font-size:14px">🔎 Un hallazgo<br><span style="font-weight:normal;font-size:11px">algo dañado o por arreglar</span></button><button type="button" id="inft_a" onclick="infraTipo('actividad')" style="flex:1;border:0;border-radius:10px;padding:13px 6px;font-weight:bold;font-size:14px">✅ Una actividad hecha<br><span style="font-weight:normal;font-size:11px">un arreglo o mantenimiento</span></button></div>
+  ${T('3. ¿Qué parte?')}<div>${INFRA_CAT.map(chip).join('')}</div>
+  <textarea id="infobs" rows="2" style="width:100%;font-size:15px;margin-top:6px" placeholder="Detalle: qué encontró o qué se hizo"></textarea>
+  <div id="infh">${T('4. ¿Qué tan grave es?')}<div style="display:flex;gap:6px">${[['baja','#78909c','Baja'],['media','#f9a825','Media'],['alta','#c62828','ALTA']].map(x=>`<button type="button" class="infg" data-g="${x[0]}" onclick="infraGrav('${x[0]}')" style="flex:1;border:0;border-radius:8px;padding:12px 4px;background:${x[1]};color:#fff;font-weight:bold;font-size:14px">${x[2]}</button>`).join('')}</div>
+   ${T('5. ¿Quién lo arregla?')}<select id="infej" style="width:100%;font-size:15px;padding:9px">${EJ_OPC.map(e=>`<option value="${e[0]}">${e[1]}</option>`).join('')}</select></div>
+  <div id="infa" style="display:none">${T('4. ¿Qué se hizo?')}<select id="infact" style="width:100%;font-size:15px;padding:9px">${OT_ACTS.infra.concat(['Otra (escríbala en el detalle)']).map(a=>`<option>${esc(a)}</option>`).join('')}</select><div style="display:flex;gap:6px;margin-top:6px"><input id="infcant" type="number" inputmode="decimal" step="any" placeholder="Cantidad (opcional)" style="flex:2;font-size:15px;padding:9px"><select id="infun" style="flex:1;font-size:15px;padding:9px">${['un','m','m²','m³','ml','kg','h'].map(u=>`<option>${u}</option>`).join('')}</select></div></div>
+  ${T('6. Foto')}${rolFotoHtml()}<div id="infgps" style="font-size:11px;color:#2e7d32;margin-top:4px"></div>
+  <div style="display:flex;gap:6px;margin-top:12px"><button type="button" onclick="infraGuardar()" style="flex:2;border:0;border-radius:8px;padding:14px;background:#2e7d32;color:#fff;font-weight:bold;font-size:15px">💾 Guardar</button><button type="button" onclick="inicioRol()" style="flex:1;border:0;border-radius:8px;padding:14px;background:#eee">Cancelar</button></div>`);
+ infraTipo('hallazgo');infraGrav('media');setTimeout(()=>{const g=$('infgps');if(g)g.textContent=ultimaPos?'📍 Ubicación GPS tomada (±'+(gpsPrec||'?')+' m)':'📍 Buscando GPS… (si no llega, igual se guarda con el sitio elegido)';},1500);}
+function infraTipo(t){INF.tipo=t;const h=$('inft_h'),a=$('inft_a');if(h){h.style.background=t=='hallazgo'?'#e65100':'#eceff1';h.style.color=t=='hallazgo'?'#fff':'#333';}if(a){a.style.background=t=='actividad'?'#2e7d32':'#eceff1';a.style.color=t=='actividad'?'#fff':'#333';}
+ if($('infh'))$('infh').style.display=t=='hallazgo'?'':'none';if($('infa'))$('infa').style.display=t=='actividad'?'':'none';}
+function infraCat(i){INF.cat.has(i)?INF.cat.delete(i):INF.cat.add(i);document.querySelectorAll('.infc').forEach(b=>{const on=INF.cat.has(+b.dataset.i);b.style.background=on?'#004A61':'#fff';b.style.color=on?'#fff':'#222';});}
+function infraGrav(g){INF.grav=g;document.querySelectorAll('.infg').forEach(b=>{b.style.outline=b.dataset.g==g?'3px solid #222':'none';b.style.opacity=b.dataset.g==g?'1':'.55';});}
+function infraGuardar(){const sel=$('infsitio');const sitio=sel?sel.value:'';if(!sitio){alert('Elija el sitio (área de servicio, peaje o báscula).');return;}const op=sel.selectedOptions[0];const zona=op.dataset.z||'',st=op.dataset.t||'';
+ const cats=[...INF.cat].map(i=>INFRA_CAT[i]);const obs=($('infobs')&&$('infobs').value.trim())||'';if(!cats.length&&!obs){alert('Marque qué parte o escriba el detalle.');return;}if(!ROL_FOTOS.length){alert('Tome al menos una foto.');return;}
+ const act=INF.tipo=='actividad';const a=act?($('infact')?$('infact').value:''):'';if(act&&/^Otra/.test(a)&&!obs){alert('Escriba en el detalle qué se hizo.');return;}const c=act&&$('infcant')?$('infcant').value:'';
+ const ej=act?'':($('infej')?$('infej').value:'cuadrilla');const yo=localStorage.getItem('pms_usuario')||'';
+ const rec={id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),tipo:'nota',codigo:'',trayecto:'',calzada:'',carril:'',usuario:yo,correo:localStorage.getItem('pms_correo')||'',fecha:_hoyLocal(),pr_ini:null,pr_fin:null,
+  observacion:`[Infraestructura · ${sitio} · ${act?'Actividad realizada':'Hallazgo'}] ${cats.join('; ')}${cats.length&&obs?'. ':''}${obs}${act?'':' (gravedad '+INF.grav+')'}`,urgente:(!act&&INF.grav=='alta')?1:0,registrado:new Date().toISOString(),
+  lat:ultimaPos?ultimaPos[0]:null,lon:ultimaPos?ultimaPos[1]:null,gps_prec:(typeof gpsPrec!='undefined'?gpsPrec:null),fotos:ROL_FOTOS.slice(0,4),fotos_meta:ROL_FOTOS.slice(0,4).map(()=>({uso:'sin_ia'})),foto_uso:'sin_ia',
+  elemento:{id:'',clase:'infra',grupo:'Infraestructura',tipo:sitio,sitio:sitio,sitio_tipo:st,zona:zona,gravedad:act?'media':INF.grav,defectos:cats,reporte:1,orden:1}};
+ if(act)Object.assign(rec.elemento,{hecho:1,actividad:/^Otra/.test(a)?obs:a,cantidad:c===''?'':+c,unidad:c===''?'':($('infun')?$('infun').value:''),cuadrilla:yo});else if(ej&&ej!='cuadrilla')rec.elemento.asignado=ej;
+ const r=registros();r.push(rec);setRegistros(r);nReg();ROL_FOTOS=[];
+ alert(act?'Actividad guardada: llega al coordinador de '+zona+' para revisarla. Se envía sola cuando haya señal.':'Hallazgo guardado: se crea la orden para '+ejNombre(ej||'cuadrilla')+' y llega al coordinador de '+zona+'. Se envía sola cuando haya señal.');try{inicioRol();}catch(e){}try{sincronizar();}catch(e){}}
+(function(){if(DATA!=='Campo')return;
+ // la infraestructura no sale como un tipo de elemento del inventario ni del reporte de vía
+ ['invGrupos','repAbrir'].forEach(n=>{const f=window[n];if(typeof f=='function')window[n]=sinInfra(f);});try{repAbrir=window.repAbrir;invGrupos=window.invGrupos;}catch(e){}
+ // (2) «¿Quién lo arregla?» en el reporte (no en «Hice un arreglo» de la cuadrilla)
+ const _ra59=repAbrir;repAbrir=window.repAbrir=function(){const r=_ra59.apply(this,arguments);try{if(CU_ARR)return r;const ot=$('repot');const l=ot&&ot.closest('label');const html=`<div id="repejw" style="margin-top:8px"><div style="font-size:13px;font-weight:bold;margin:6px 0 4px">¿Quién lo arregla?</div><select id="repej" style="width:100%;font-size:15px;padding:9px">${EJ_OPC.map(e=>`<option value="${e[0]}">${e[1]}</option>`).join('')}</select><div style="font-size:11px;color:#666;margin-top:3px">VyS y Corseing hacen demarcación y pintura: la orden les llega cuando BTS cree su contrato.</div></div>`;
+   if(l)l.insertAdjacentHTML('afterend',html);else{const o=$('repobs');if(o)o.insertAdjacentHTML('afterend',html);}
+   $('repej').addEventListener('change',function(){this._tocado=1;});}catch(e){console.error(e);}return r;};
+ // demarcación y pintura → se sugiere el contratista (se puede cambiar)
+ const _rgs59=repGrupoSel;repGrupoSel=function(k){const r=_rgs59.apply(this,arguments);try{const s=$('repej');if(s&&!s._tocado)s.value=(k=='senh')?'VyS':'cuadrilla';}catch(e){}return r;};
+ const _sr59=setRegistros;setRegistros=function(r){try{if(!CU_ARR&&r&&r.length&&$('repej')){const x=r[r.length-1];if(x&&x.tipo=='nota'&&x.elemento&&x.elemento.reporte&&!x.elemento.hecho&&x.elemento.asignado===undefined){const v=$('repej').value;if(v&&v!='cuadrilla')x.elemento.asignado=v;}}}catch(e){}return _sr59.apply(this,arguments);};
+ // la cuadrilla no ve lo que es de un contratista; el coordinador puede pasarlo a un contratista
+ const _om59=otMias;otMias=function(){return _om59.apply(this,arguments).filter(o=>!o.ej);};
+ otPorRevisar=function(){return ordenes().filter(o=>o.est=='abierta'&&enMiZonaO(o));};
+ otPorCerrar=function(){return ordenes().filter(o=>o.est=='hecha'&&enMiZonaO(o));};
+ const _orv59=otRevisar;otRevisar=function(id){const s=$('otc_'+id);const v=s?s.value:'';if(v&&EJ_OPC.some(e=>e[0]==v&&v!='cuadrilla')){const p=$('otp_'+id)?$('otp_'+id).value:'2';ordenEvento(id,'revisar',{prioridad:p,ejecutor:v},{est:'revisada',p:p,cu:'',ej:v,rpor:localStorage.getItem('pms_usuario')||'',rvf:ahoraLocal()});otLista();return;}return _orv59.apply(this,arguments);};
+ // tarjetas: sitio de infraestructura, ejecutor, revisión del inspector y botones nuevos
+ const _ot59=otTarjeta;otTarjeta=function(o,modo){let h=_ot59(o,modo=='verificar'||modo=='contratista'?(modo=='contratista'?'cuadrilla':'x'):modo);
+   try{if(o.cl=='infra')h=h.replace(/📍 Trayecto[\s\S]*?<\/b>/,'📍 <b>'+esc(o.el)+'</b>'+(o.z?' · '+esc(o.z):''));
+    if(modo=='revisar')h=h.replace(/(<select id="otc_[^"]*"[^>]*><option value="">Cualquier cuadrilla<\/option>)/,'$1'+EJ_OPC.slice(1).map(e=>`<option value="${e[0]}"${o.ej==e[0]?' selected':''}>${e[1]}</option>`).join(''));
+    let extra='';if(o.ej)extra+=`<div style="font-size:12px;margin-top:4px;color:#6a1b9a">🎨 Lo arregla: <b>${esc(ejNombre(o.ej))}</b>${o.ctr?' · contrato '+esc(o.ctr):' · <i>contrato aún no creado</i>'}</div>`;
+    if(o.est=='hecha'||o.est=='cerrada')extra+=o.vpor?`<div style="font-size:12px;margin-top:4px;color:#2e7d32">✔ Revisado por el inspector ${esc(o.vpor)}${o.vf?' · '+esc(o.vf):''}${o.vobs?': '+esc(o.vobs):''}</div>`:(o.est=='hecha'?`<div style="font-size:12px;margin-top:4px;color:#e65100">⏳ Falta la revisión del inspector</div>`:'');
+    if(modo=='verificar')extra+=`<div style="display:flex;gap:6px;margin-top:8px"><button type="button" onclick="otVerificar('${o.id}')" style="flex:1;border:0;border-radius:8px;padding:11px;background:#2e7d32;color:#fff;font-weight:bold;font-size:14px">✔ Quedó bien</button><button type="button" onclick="otDevolver('${o.id}')" style="flex:1;border:0;border-radius:8px;padding:11px;background:#e65100;color:#fff;font-weight:bold;font-size:14px">↩ Devolver</button></div>`;
+    if(extra){const k=h.lastIndexOf('<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">');if(k>0)h=h.slice(0,k)+extra+h.slice(k);else h=h.replace(/<\/div>$/,extra+'</div>');}}catch(e){console.error(e);}return h;};
+ const _ol59=otLista;otLista=function(modo){if(modo!='verificar'&&modo!='contratista')return _ol59.apply(this,arguments);OT_MODO=modo;
+   const L=modo=='verificar'?otPorVerificar():otDelContratista();const tit=modo=='verificar'?'🔍 Arreglos por revisar':'🛠 Órdenes de BTS para su contrato';
+   const intro=modo=='verificar'?'La cuadrilla los marcó como hechos. Mire la foto del después: «Quedó bien» o «Devolver». Luego el coordinador los cierra.':'Arreglos que BTS le asignó. Toque «Cómo llegar», haga el arreglo y marque «hecha» con una foto.';
+   masPanel(tit,`<div style="font-size:13px;color:#555;margin:4px 0 6px">${intro}</div><div style="font-size:12px;color:#666">${L.length} orden(es)</div>`+(L.length?L.map(o=>otTarjeta(o,modo)).join(''):'<div style="padding:22px;color:#2e7d32;text-align:center;font-size:15px">✔ No hay nada pendiente aquí.</div>')+
+    `<button type="button" onclick="${modo=='contratista'?'masCerrar()':'inicioRol()'}" style="width:100%;margin-top:8px;border:0;border-radius:8px;padding:11px;background:#eceff1;font-size:14px">${modo=='contratista'?'◀ Volver':'🏠 Volver al inicio'}</button>`);};
+ const _ohg59=otHechaGuardar;otHechaGuardar=function(){const r=_ohg59.apply(this,arguments);try{if(vcActiva()&&otDelContratista)setTimeout(()=>otLista('contratista'),50);}catch(e){}return r;};
+ // Inicio del inspector y del coordinador: «Arreglos por revisar» y «Infraestructura»
+ const _ir59=inicioRol;inicioRol=function(){const r=_ir59.apply(this,arguments);try{if(cuOn())return r;const v=rolVista();if(v!='inspector'&&v!='coord')return r;const box=masCaja();const g=box&&[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g||g.querySelector('.c59'))return r;
+   const card=(ico,t,sub,fn,n,col)=>`<div class="c59" onclick="${fn}" style="position:relative;background:${col||'#fff'};color:${col?'#fff':'#222'};border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px"><div style="font-size:34px;line-height:1.1">${ico}</div><div style="font-size:14px;font-weight:bold;margin-top:4px">${t}</div><div style="font-size:11px;opacity:.8">${sub||''}</div>${n?`<span style="position:absolute;top:8px;right:8px;background:#d32f2f;color:#fff;border-radius:12px;min-width:24px;height:24px;line-height:24px;font-size:13px;font-weight:bold;padding:0 6px">${n}</span>`:''}</div>`;
+   let h='';if(v=='inspector'){const n=otPorVerificar().length;h+=card('🔍','Arreglos por revisar','hechos por la cuadrilla',"otLista('verificar')",n,n?'#2e7d32':'');}
+   h+=card('🏢','Infraestructura','áreas de servicio, peajes y básculas','infraAbrir()',0,'#5d4037');
+   const ref=g.children[v=='inspector'?2:1];if(ref)ref.insertAdjacentHTML('afterend',h);else g.insertAdjacentHTML('beforeend',h);}catch(e){console.error(e);}return r;};
+ // contratista: sus órdenes de BTS en «Más»
+ const _mp59=masPanel;masPanel=function(titulo,cuerpo){try{if(/Más · contratista/.test(titulo)){const n=otDelContratista().length;cuerpo=`<div onclick="otLista('contratista')" style="display:flex;align-items:center;gap:10px;background:${n?'#fff3e0':'#fff'};border:${n?'2px solid #ef6c00':'0'};border-radius:10px;padding:10px;margin:6px 0;cursor:pointer"><span style="font-size:26px">🛠</span><div style="flex:1"><b style="font-size:14px">Órdenes de BTS</b><div style="font-size:11px;color:#666">arreglos que BTS le asignó${n?'':' · no tiene pendientes'}</div></div>${n?`<span style="background:#d32f2f;color:#fff;border-radius:12px;padding:2px 9px;font-weight:bold">${n}</span>`:'<span style="color:#999">›</span>'}</div>`+String(cuerpo||'');}}catch(e){}return _mp59(titulo,cuerpo);};
+ // avisos al instante: arreglos hechos → inspector y coordinador; reportes para un contratista → no le suenan a la cuadrilla
+ const _quien59=avQuien;avQuien=function(){try{const r=rolActual();if(r=='inspector'||r=='contratista')return true;}catch(e){}return _quien59();};
+ const _avo59=avOrden;avOrden=function(a){const o=_avo59(a);o.ej=a.ej||'';if(!o.z)o.z=a.zona||'';if(a.k=='hecha'){o.est='hecha';o.hpor=a.usuario||'';o.hf=String(a.f||'').replace('T',' ').slice(0,16);o.act=a.act||'';o.cant=a.cant;o.un=a.un||'';o.cu=a.usuario||'';}if(a.cl=='infra'){o.t='';}return o;};
+ const _amt59=avMeToca;avMeToca=function(o){try{const r=rolActual();const yo=localStorage.getItem('pms_usuario')||'';
+   if(o.est=='hecha'){if(r=='inspector'){const I=inspectores();return o.rep==yo||!I.includes(o.rep);}if(r=='campo'||r=='contratista')return false;return enMiZonaO(o);}
+   if(r=='campo'&&o.ej)return false;if(r=='contratista'){const c=vcContrato();return !!(c&&o.ej&&acNorm(c.contratista).includes(acNorm(o.ej)));}if(r=='inspector')return false;}catch(e){}return _amt59(o);};
+ // los avisos «hecha_ot» marcan la orden como hecha en el celular del inspector y del coordinador al instante
+ const _o59=ordenes;ordenes=function(){const L=_o59.apply(this,arguments);try{const H=AV.L.filter(a=>a.k=='hecha_ot');if(!H.length)return L;const by={};H.forEach(a=>{by[a.oid]=a;});
+   return L.map(o=>{const a=by[o.id]||by[o.org];if(!a||o.est=='hecha'||o.est=='cerrada'||o.est=='anulada'||o._loc)return o;return Object.assign({},o,{est:'hecha',hpor:a.usuario,hf:String(a.f||'').replace('T',' ').slice(0,16),act:a.act,cant:a.cant,un:a.un,_av:1});});}catch(e){return L;}};
+ const _an59=avNotificar;avNotificar=function(L){const nuevos=L.filter(a=>(a.k||'nuevo')=='nuevo'),hechos=L.filter(a=>a.k=='hecha'||a.k=='hecha_ot');if(nuevos.length)_an59(nuevos);
+   if(hechos.length){const a=hechos[0];const o=a.k=='hecha_ot'?(ordenes().find(x=>x.id==a.oid||x.org==a.oid)||{}):avOrden(a);const tit=(hechos.length>1?hechos.length+' arreglos hechos':'Arreglo hecho')+' · por revisar';
+    const cuerpo=`${a.usuario||'Cuadrilla'}: ${a.act||''}${o.el?' · '+o.el:''}${o.t?' · Trayecto '+o.t+(o.pr!=null&&o.pr!==''?' PR '+prTxt(+o.pr):''):''}`;
+    try{navigator.vibrate&&navigator.vibrate([200,100,200]);}catch(e){}avPitar();try{avisoCorto('✅ '+tit+': '+cuerpo);}catch(e){}
+    try{if('Notification' in window&&Notification.permission==='granted')navigator.serviceWorker.getRegistration().then(r=>{const op={body:cuerpo,tag:'pms-h-'+a.id,icon:'icono.svg'};if(r&&r.showNotification)r.showNotification('PMS Campo: '+tit,op);else new Notification('PMS Campo: '+tit,op);});}catch(e){}}};
+ // en avPedir los «hecha_ot» no son órdenes nuevas: se filtran por su orden
+ const _avm59=avMeToca;avMeToca=function(o){if(o&&o._hot){const x=ordenes().find(y=>y.id==o._hot||y.org==o._hot);return x?_avm59(Object.assign({},x,{est:'hecha'})):false;}return _avm59(o);};
+ const _avo59b=avOrden;avOrden=function(a){if(a.k=='hecha_ot')return {id:a.id,_hot:a.oid,est:'hecha'};return _avo59b(a);};
+ const _o59b=ordenes;ordenes=function(){return _o59b.apply(this,arguments).filter(o=>!o._hot);};
+})();
 </script></body></html>
