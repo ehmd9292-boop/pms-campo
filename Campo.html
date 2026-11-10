@@ -3335,4 +3335,30 @@ function cuActs(){const s=$('cuact');if(!s)return;const k=(REP&&REP.g)||'pav';s.
  const _ae55=acEntrar;acEntrar=async function(){const ok=await _ae55.apply(this,arguments);try{cuAplicar();if(ok&&cuOn())setTimeout(()=>{try{cuInicio();}catch(e){}},700);}catch(e){}return ok;};
  cuAplicar();let ab=false;[1500,3500,7000,12000].forEach(t=>setTimeout(()=>{if(ab||!cuOn()||document.querySelector('#vclogin,#vcnueva'))return;ab=true;cuAplicar();try{cuInicio();}catch(e){}},t));
 })();
+// ================= v256 (Erix, 10-nov-2026, 11:57): mapa de la cuadrilla: SOLO lo que tiene pendiente, con color de urgencia
+// (rojo = alta, amarillo = media, verde = baja, según lo que reportó el inspector o el coordinador). Al tocar: solo el nombre del tramo y se prende el GPS.
+const CU_COL={'1':'#d32f2f','2':'#f9a825','3':'#2e7d32'};
+function cuNombre(o){if(o.cod&&FICHA[o.cod])return o.cod;const pr=Math.round(+o.pr||0);return `${o.t||'?'}-${o.cz||''}${o.car?'-'+o.car:''}-Pr ${pr}`;}
+function cuTocar(o){try{if(typeof watch=='undefined'||watch==null)gps();}catch(e){}}
+function cuDibujar(){try{capa.clearLayers();}catch(e){}try{[capaInt,window.MODLAY].forEach(g=>{if(g&&map.hasLayer(g)){map.removeLayer(g);g._cuQuitada=1;}});}catch(e){}const L_=otMias();const B=[];      // sin tareas, inspecciones ni otras marcas
+ L_.forEach(o=>{const col=CU_COL[o.p]||CU_COL['2'];const nom=cuNombre(o);const pop=`<div style="font-size:15px;font-weight:bold">${esc(nom)}</div>`;let lay=null;
+  const q=o.cod&&COORDS[o.cod];
+  if(q){lay=L.polyline([[q[0],q[1]],[q[2],q[3]]],{color:col,weight:12,opacity:.95});B.push([q[0],q[1]],[q[2],q[3]]);const m=[(q[0]+q[2])/2,(q[1]+q[3])/2];
+    L.circleMarker(m,{radius:9,color:'#fff',weight:2,fillColor:col,fillOpacity:1}).bindPopup(pop).on('click',()=>cuTocar(o)).addTo(capa);}
+  else if(o.lat!=null&&o.lon!=null){lay=L.circleMarker([+o.lat,+o.lon],{radius:11,color:'#fff',weight:3,fillColor:col,fillOpacity:1});B.push([+o.lat,+o.lon]);}
+  if(lay){lay.bindPopup(pop).on('click',()=>cuTocar(o)).addTo(capa);}});
+ try{if(B.length==1)map.setView(B[0],15);else if(B.length>1)map.fitBounds(B,{padding:[30,30],maxZoom:15});}catch(e){}
+ try{let lg=$('culeyenda');if(!lg){document.body.insertAdjacentHTML('beforeend','<div id="culeyenda"></div>');lg=$('culeyenda');}
+  lg.innerHTML=L_.length?`<b>${L_.length} por hacer</b> &nbsp;<span style="color:${CU_COL['1']}">●</span> alta &nbsp;<span style="color:${CU_COL['2']}">●</span> media &nbsp;<span style="color:${CU_COL['3']}">●</span> baja`:'✔ Sin órdenes pendientes';}catch(e){}}
+(function(){if(DATA!=='Campo')return;
+ const css=document.createElement('style');css.textContent='#culeyenda{display:none} body.cu #culeyenda{display:block;position:fixed;top:78px;left:50%;transform:translateX(-50%);z-index:900;background:#fff;border-radius:16px;padding:6px 14px;font-size:14px;box-shadow:0 1px 5px rgba(0,0,0,.25);white-space:nowrap} body.cu .leaflet-control-layers{display:none}';document.head.appendChild(css);
+ const _d56=dibujar;dibujar=function(){if(cuOn())return cuDibujar();return _d56.apply(this,arguments);};
+ const _ca56=cuAplicar;cuAplicar=function(){const was=document.body.classList.contains('cu');const r=_ca56.apply(this,arguments);try{const on=document.body.classList.contains('cu');if(!on){[capaInt,window.MODLAY].forEach(g=>{if(g&&g._cuQuitada){g._cuQuitada=0;g.addTo(map);}});}if(on||was)dibujar();}catch(e){}return r;};
+ // después de marcar una orden hecha o al llegar órdenes nuevas, el mapa se actualiza
+ ['otHechaGuardar','refrescarLiviano'].forEach(n=>{const f=window[n];if(typeof f!='function')return;window[n]=function(){const r=f.apply(this,arguments);const re=()=>{try{if(cuOn())cuDibujar();}catch(e){}};if(r&&typeof r.then=='function')r.then(re,re);else setTimeout(re,300);return r;};});
+ // «Mapa» de una orden: también solo el nombre del tramo
+ const _om56=otMapa;otMapa=function(id){if(!cuOn())return _om56.apply(this,arguments);const o=otDe(id);if(!o)return;masCerrar();cuDibujar();const q=o.cod&&COORDS[o.cod];const ll=q?[(q[0]+q[2])/2,(q[1]+q[3])/2]:(o.lat!=null?[+o.lat,+o.lon]:null);if(!ll)return;map.setView(ll,17);
+   try{L.popup().setLatLng(ll).setContent(`<div style="font-size:15px;font-weight:bold">${esc(cuNombre(o))}</div>`).openOn(map);}catch(e){}cuTocar(o);};
+ try{if(cuOn())setTimeout(()=>{try{dibujar();}catch(e){}},1600);}catch(e){}
+})();
 </script></body></html>
