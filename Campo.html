@@ -3517,4 +3517,71 @@ function infraGuardar(){const sel=$('infsitio');const sitio=sel?sel.value:'';if(
  const _avo59b=avOrden;avOrden=function(a){if(a.k=='hecha_ot')return {id:a.id,_hot:a.oid,est:'hecha'};return _avo59b(a);};
  const _o59b=ordenes;ordenes=function(){return _o59b.apply(this,arguments).filter(o=>!o._hot);};
 })();
+// ================= v260 (Erix, 10-nov-2026, 15:32): REGLAS DEL CONTRATO (Lápiz CTO 2026-53): solo Boyacá, tramos de mínimo 300 m (se unen tramos
+// separados hasta 100 m), todo el valor en slurry con su sello (sello antes), microfresado 0, los 23 «solo slurry» se incluyen aunque queden cortos.
+// Nace como BORRADOR: solo el administrador lo ve; el contratista sigue con el programa anterior hasta que el administrador lo apruebe.
+function vcReglas(c){try{c=c||vcContrato();if(!c)return null;const R=(((VERSION&&VERSION.relaciones)||{}).reglas_contratos||{})[c.contrato];return R||null;}catch(e){return null;}}
+function vcEsAdmin(){try{const u=miUsuario();return String((u&&u.rol)||'').toLowerCase()=='administrador';}catch(e){return false;}}
+function vcReglaActiva(c){const R=vcReglas(c);if(!R)return null;if(R.estado=='vigente'||RG_APROBADA[(c||vcContrato()||{}).contrato])return R;if(vcEsAdmin()&&localStorage.getItem('pms_borrador_off')!='1')return R;return null;}
+let RG_APROBADA=(function(){try{return JSON.parse(localStorage.getItem('pms_reglas_aprob')||'{}');}catch(e){return {};}})();
+const RG_URG={'Inmediata (seguridad)':5,'Alta':4,'Media':3,'Adelantada (requerida el año siguiente)':2,'Baja/Seguimiento':1};
+function vcProgReglas(c,R,base){const esc=DATOS['Base BC']?'Base BC':Object.keys(DATOS)[0];if(!esc)return [];const anios=Object.keys(DATOS[esc]).map(Number).sort((a,b)=>a-b);const a0=anios[0];
+ const SLU='Slurry (sello + slurry seal)',SEL='Sello de fisuras';const it=n=>(c.items||[]).find(i=>vcMismaAct(i.actividad,n))||{};const fa=vcFa(c);const pS=(+it(SLU).precio||0)*fa,pE=(+it(SEL).precio||0)*fa;const rel=relSello()||1;const valor=+c.valor||0;
+ const zonaOk=t=>!R.zona||zonaDe(t)==R.zona;const first={};anios.forEach(a=>(DATOS[esc][a]||[]).forEach(f=>{if(!first[f[0]]&&f[1]!='none'&&f[1]!='excl')first[f[0]]={a:a,f:f};}));
+ const SP={};(vcSlurryPendiente()||[]).forEach(p=>{const fi=FICHA[p.cod];if(fi&&zonaOk(fi.t))SP[p.cod]=p;});
+ const cand={};Object.keys(first).forEach(cod=>{const x=first[cod],f=x.f;if(!zonaOk(f[18]))return;const L=+f[17]||100;
+   if(SP[cod]){cand[cod]={cod:cod,t:f[18],L:L,m2:+SP[cod].m2||L*3.85,sello:0,urg:6,rk:0,solo:1,fecha_micro:SP[cod].fecha_micro,desc:f[5]||'',anio:'2026'};return;}
+   if(x.a!=a0||f[1]!='slurry'||(+f[24]||0)<=0)return;if(vcHechoPrevio(cod,SLU,c))return;
+   cand[cod]={cod:cod,t:f[18],L:L,m2:+f[24],sello:(+f[24])*rel,urg:RG_URG[f[6]]||1,rk:+f[15]||9999,solo:0,desc:f[5]||'',anio:a0};});
+ Object.keys(SP).forEach(cod=>{if(!cand[cod]){const fi=FICHA[cod];cand[cod]={cod:cod,t:fi.t,L:+fi.L||100,m2:+SP[cod].m2,sello:0,urg:6,rk:0,solo:1,fecha_micro:SP[cod].fecha_micro,desc:'Slurry Seal',anio:'2026'};}});
+ const re=/^(.+)-(Derecha|Izquierda|Única|Unica)-(Externo|Interno|Único|Unico)-Pr (\d+)$/;const lin={};
+ (DATOS[esc][a0]||[]).forEach(f=>{if(!zonaOk(f[18]))return;const m=re.exec(f[0]);if(!m)return;const k=m[1]+'|'+m[2]+'|'+m[3];(lin[k]=lin[k]||[]).push({cod:f[0],pr:+m[4],L:+f[17]||100,acc:f[1]});});
+ Object.keys(cand).forEach(cod=>{const m=re.exec(cod);if(!m)return;const k=m[1]+'|'+m[2]+'|'+m[3];lin[k]=lin[k]||[];if(!lin[k].some(x=>x.cod==cod))lin[k].push({cod:cod,pr:+m[4],L:cand[cod].L,acc:'slurry'});});
+ const GAP=+R.puente_m||0,MIN=+R.min_ml||0;const runs=[];
+ Object.keys(lin).forEach(k=>{const L_=lin[k].sort((a,b)=>a.pr-b.pr);let cur=[],hueco=[];
+   const cierra=()=>{if(cur.length)runs.push(cur);cur=[];hueco=[];};
+   L_.forEach(x=>{if(cand[x.cod]){if(cur.length&&hueco.length){if(hueco.reduce((t,h)=>t+h.L,0)<=GAP)hueco.forEach(h=>cur.push({cod:h.cod,t:k.split('|')[0],L:h.L,m2:h.L*3.8,sello:h.L*3.8*rel,urg:1,rk:9999,puente:1,desc:'Une el tramo (el plan lo pedía más adelante)',anio:'adelantado'}));else{runs.push(cur);cur=[];}}
+      else if(cur.length){const p=cur[cur.length-1];const pp=re.exec(p.cod);if(pp&&x.pr-(+pp[4]+p.L)>1+GAP){runs.push(cur);cur=[];}}
+      cur.push(cand[x.cod]);hueco=[];}
+     else{if(!cur.length)return;if(x.acc=='micro'||x.acc=='fresado'||hueco.reduce((t,h)=>t+h.L,0)+x.L>GAP){cierra();return;}hueco.push(x);}});
+   cierra();});
+ const R2=runs.map(r=>{const ml=r.reduce((t,x)=>t+x.L,0);const costo=r.reduce((t,x)=>t+x.m2*pS+x.sello*pE,0);return {r:r,ml:ml,costo:costo,urg:r.reduce((t,x)=>t+x.urg*x.L,0)/ml,solo:r.filter(x=>x.solo).length};})
+   .filter(t=>t.ml>=MIN||(R.excepcion_solo_slurry&&t.solo>0)).sort((a,b)=>(b.solo>0)-(a.solo>0)||b.urg-a.urg||b.ml-a.ml);
+ const out=[];let g=0,n=0;const usado={};
+ R2.forEach(t=>{if(valor&&g+t.costo>valor)return;g+=t.costo;n++;const m0=re.exec(t.r[0].cod),m1=re.exec(t.r[t.r.length-1].cod);const pf=(+m1[4])+t.r[t.r.length-1].L;
+   const txt=`Tramo ${n}: T${m0[1]} ${m0[2]} ${m0[3]} · PR ${prTxt(+m0[4])} a ${prTxt(pf)} · ${fmt(t.ml,0)} m`;
+   t.r.forEach(x=>{const cc=vcCzCar(x.cod);const acts=[];if(x.sello>0)acts.push({act:SEL,q:x.sello,un:'ml',costo:x.sello*pE});acts.push({act:SLU,q:x.m2,un:'m²',costo:x.m2*pS});acts.forEach(a=>{usado[a.act]=(usado[a.act]||0)+a.q;});
+     out.push({cod:x.cod,t:x.t,cz:cc[0],car:cc[1],pri:x.rk,rango:x.rk,anio:x.anio,L:x.L,desc:(x.solo?'Solo slurry (micro y sello ya hechos)':x.puente?x.desc:(x.desc||'Sello de fisuras + Slurry Seal'))+' · '+txt,acts:acts,fase:x.solo?0:2,k:'slurry',costo:acts.reduce((s,a)=>s+a.costo,0),hecho:false,
+       slurry_pend:x.solo?true:undefined,fecha_micro:x.fecha_micro,tramo:n,tramoTxt:txt,puente:x.puente?1:0});});});
+ ['items','fa','aMicro','_k47','_rel','_ctr','v234'].forEach(k=>{if(base&&base[k]!==undefined)out[k]=base[k];});
+ out.usado=usado;out.gasto=g;out.n_pend=out.filter(r=>r.slurry_pend).length;out.pend_m2=out.filter(r=>r.slurry_pend).reduce((t,r)=>t+r.acts[r.acts.length-1].q,0);out._v49=true;out._reglas=R;
+ out._res={tramos:n,ml:out.reduce((t,r)=>t+r.L,0),m2:usado[SLU]||0,sello:usado[SEL]||0,costo:g,valor:valor,solo:out.filter(r=>r.slurry_pend).length,soloTot:Object.keys(SP).length,puente:out.filter(r=>r.puente).reduce((t,r)=>t+r.L,0),candidatos:Object.keys(cand).length};
+ return out;}
+let RG_CACHE={k:'',p:null};
+function vcReglasPanel(){const c=vcContrato();const R=vcReglas(c);if(!c||!R)return;const vig=R.estado=='vigente'||RG_APROBADA[c.contrato];const p=vcProgReglas(c,R,null);const r=p._res;
+ const fila=(a,b)=>`<tr><td style="padding:4px 6px;color:#555">${a}</td><td style="padding:4px 6px;text-align:right"><b>${b}</b></td></tr>`;
+ masPanel('📐 Reglas del contrato',`<div style="background:${vig?'#e8f5e9':'#fff8e1'};border:2px solid ${vig?'#2e7d32':'#f9a825'};border-radius:10px;padding:8px 10px;font-size:13px">${vig?'✔ <b>Vigentes</b>: el contratista ya ve este programa'+(R.aprobado_por?' (aprobó '+esc(R.aprobado_por)+')':''):'🧪 <b>BORRADOR</b>: solo usted lo ve. El contratista sigue viendo el programa anterior hasta que usted lo apruebe.'}</div>
+  <div style="font-size:13px;margin:8px 0 4px"><b>Reglas</b></div><ul style="font-size:13px;margin:0 0 6px 18px;padding:0"><li>Solo en <b>${esc(R.zona||'toda la vía')}</b></li><li>Tramos de <b>mínimo ${fmt(R.min_ml||0,0)} m</b> seguidos (sin máximo); se unen tramos separados hasta ${fmt(R.puente_m||0,0)} m</li><li>Todo el valor en <b>slurry con su sello</b> (el sello va antes del slurry; ${fmt(relSello()||1,1)} ml de sello por m²)</li><li>Microfresado: <b>0</b> (va el otro año)</li>${R.excepcion_solo_slurry?'<li>Los tramos de «solo slurry» (micro y sello ya hechos) entran aunque queden cortos</li>':''}<li>Orden: primero «solo slurry», luego lo más urgente del plan 2027, luego los tramos más largos</li></ul>
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;font-size:13px">${fila('Tramos',r.tramos)}${fila('Longitud de carril',fmt(r.ml/1000,1)+' km')}${fila('Slurry',fmt(r.m2,0)+' m²')}${fila('Sello de fisuras',fmt(r.sello,0)+' ml')}${fila('Microfresado','0 m²')}${fila('«Solo slurry» incluidos',r.solo+' de '+r.soloTot)}${fila('Tramos que se adelantan para unir',fmt(r.puente,0)+' m')}${fila('Valor programado',cop(r.costo)+' de '+cop(r.valor))}${fila('Sobrante',cop(r.valor-r.costo))}</table>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${!vig&&vcEsAdmin()?`<button type="button" onclick="rgAprobar()" style="flex:1 1 100%;border:0;border-radius:8px;padding:13px;background:#2e7d32;color:#fff;font-weight:bold;font-size:15px">✔ Aprobar y enviar al contratista</button>`:''}
+   ${!vig&&vcEsAdmin()?`<button type="button" onclick="rgVer(${localStorage.getItem('pms_borrador_off')=='1'?0:1})" style="flex:1;border:1px solid #004A61;border-radius:8px;padding:11px;background:#fff;color:#004A61;font-size:13px">${localStorage.getItem('pms_borrador_off')=='1'?'🧪 Ver el borrador (reglas nuevas)':'👁 Ver el programa que ve hoy el contratista'}</button>`:''}
+   <button type="button" onclick="masCerrar();try{vcListado()}catch(e){}" style="flex:1;border:0;border-radius:8px;padding:11px;background:#ef6c00;color:#fff;font-weight:bold;font-size:13px">📋 Ver los tramos</button></div>`);}
+function rgVer(off){try{localStorage.setItem('pms_borrador_off',off?'1':'0');}catch(e){}VC_PROG=null;VC_PROG_K='';RG_CACHE={k:'',p:null};try{vcDibujar();}catch(e){}try{vcAplicar();}catch(e){}vcReglasPanel();}
+function rgAprobar(){const c=vcContrato();if(!c||!vcEsAdmin())return;if(!confirm('¿Aprobar el programa con las reglas nuevas para '+(c.contratista||c.contrato)+'? El contratista lo verá en la próxima publicación.'))return;
+ regSistema('regla_contrato',{contrato:c.contrato,evento:'aprobar'});RG_APROBADA[c.contrato]=1;try{localStorage.setItem('pms_reglas_aprob',JSON.stringify(RG_APROBADA));localStorage.setItem('pms_borrador_off','0');}catch(e){}try{sincronizar();}catch(e){}
+ VC_PROG=null;VC_PROG_K='';avisoCorto('✔ Aprobado: el contratista lo verá cuando el PC publique (máximo en una hora).');vcReglasPanel();}
+(function(){if(DATA!=='Campo')return;
+ const _vp60=vcPrograma;vcPrograma=function(){const base=_vp60.apply(this,arguments);try{const c=vcContrato();if(!c||!base||base.mezcla)return base;const R=vcReglaActiva(c);if(!R)return base;
+   const k=[c.contrato,JSON.stringify(R),(VERSION&&VERSION.generado)||'',Object.keys(FICHA).length,relSello()].join('|');if(RG_CACHE.k===k&&RG_CACHE.p)return RG_CACHE.p;
+   const p=vcProgReglas(c,R,base);RG_CACHE={k:k,p:p};return p;}catch(e){console.error('reglas',e);return base;}};
+ // aviso en la banda de arriba y acceso a las reglas
+ const _va60=vcAplicar;vcAplicar=function(){const r=_va60.apply(this,arguments);try{const b=$('vcbanda');const c=vcContrato();const R=vcReglas(c);if(b&&vcActiva()&&R&&!b.querySelector('#rgband')){const vig=R.estado=='vigente'||RG_APROBADA[c.contrato];
+    if(vcEsAdmin()||vig)b.insertAdjacentHTML('beforeend',` &nbsp; <span id="rgband" onclick="vcReglasPanel()" style="cursor:pointer;background:${vig?'#2e7d32':'#f9a825'};color:${vig?'#fff':'#000'};border-radius:10px;padding:1px 8px;font-weight:bold">${vig?'📐 reglas':(localStorage.getItem('pms_borrador_off')=='1'?'👁 programa actual':'🧪 BORRADOR')}</span>`);}}catch(e){}return r;};
+ // en «Tramos a intervenir»: aviso del borrador y el texto de prioridad que corresponde a las reglas
+ const _vl60=vcListado;vcListado=function(){const r=_vl60.apply(this,arguments);try{const p=vcPrograma();if(!p||!p._reglas)return r;const v=masCaja();if(!v||v.querySelector('#rglist'))return r;const R=p._reglas;const c=vcContrato();const vig=R.estado=='vigente'||RG_APROBADA[c.contrato];
+   const h=v.firstElementChild&&v.firstElementChild.children[1];const html=`<div id="rglist" onclick="vcReglasPanel()" style="cursor:pointer;background:${vig?'#e8f5e9':'#fff8e1'};border:2px solid ${vig?'#2e7d32':'#f9a825'};border-radius:10px;padding:8px 10px;margin:6px 0;font-size:12px">${vig?'📐':'🧪 <b>BORRADOR</b> (solo usted lo ve) ·'} Programa con las reglas del contrato: <b>${esc(R.zona||'')}</b>, tramos de mínimo <b>${fmt(R.min_ml||0,0)} m</b>, todo en slurry con su sello, sin microfresado. ${p._res.tramos} tramos · ${fmt(p._res.ml/1000,1)} km. <u>Ver reglas${vig?'':' y aprobar'}</u></div>`;
+   if(h)h.insertAdjacentHTML('afterend',html);else v.insertAdjacentHTML('afterbegin',html);
+   [...v.querySelectorAll('div,span')].forEach(d=>{if(d.children.length==0&&/^Prioridad: microfresado del primer año/.test(d.textContent))d.textContent='Prioridad: primero los tramos de «solo slurry», luego los más urgentes del plan 2027 (sello de fisuras y luego slurry), en tramos de mínimo '+fmt(R.min_ml||0,0)+' m.';});}catch(e){console.error(e);}return r;};
+ const _mp60=masPanel;masPanel=function(titulo,cuerpo){try{if(/Más · contratista/.test(titulo)){const c=vcContrato();const R=vcReglas(c);if(R&&(vcEsAdmin()||R.estado=='vigente'))cuerpo=`<div onclick="vcReglasPanel()" style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:10px;padding:10px;margin:6px 0;cursor:pointer;border:2px solid ${R.estado=='vigente'?'#2e7d32':'#f9a825'}"><span style="font-size:26px">📐</span><div style="flex:1"><b style="font-size:14px">Reglas del contrato</b><div style="font-size:11px;color:#666">${esc(R.zona||'')} · tramos ≥ ${fmt(R.min_ml||0,0)} m · sin microfresado${R.estado=='vigente'?'':' · <b>borrador por aprobar</b>'}</div></div><span style="color:#999">›</span></div>`+String(cuerpo||'');}}catch(e){}return _mp60(titulo,cuerpo);};
+})();
 </script></body></html>
