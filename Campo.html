@@ -3615,4 +3615,62 @@ function sluLista(){const enP=sluEnPrograma();const L_=Object.keys(enP).filter(s
  // en el panel de reglas: cuántas secciones del borrador ya tuvieron slurry
  const _rp61=vcReglasPanel;vcReglasPanel=function(){const r=_rp61.apply(this,arguments);try{if(!vcEsAdmin())return r;const n=Object.keys(sluEnPrograma()).filter(sluReciente).length;const v=masCaja();const t=v&&v.querySelector('table');if(t)t.insertAdjacentHTML('afterend',`<div onclick="sluLista()" style="cursor:pointer;margin-top:8px;background:${n?'#fce4ec':'#e8f5e9'};border-radius:8px;padding:8px 10px;font-size:13px">🟣 Secciones del programa con slurry de 2025–2026: <b>${n}</b> <u>ver</u> <span style="font-size:11px;color:#777">(solo usted)</span></div>`);}catch(e){}return r;};
 })();
+// ================= v262 (Erix, 11-nov-2026, 16:33): la revisión del plan en campo con FIRMA DEL GESTOR
+// 1) «No intervenir» pide motivo y foto. 2) Los cambios grandes (quitar la obra, otra actividad o una cantidad que cambia más de la mitad)
+// quedan esperando al gestor: él los aprueba o rechaza desde su inicio; mientras tanto el plan sigue como estaba.
+const NI_MOTIVOS=['Ya fue intervenida (obra reciente)','El estado real es mejor que el medido','Se atenderá con otra obra u otro contrato','Otro (explíquelo en la nota)'];
+function rvgFirmo(){const r=rolActual();return r=='gestor'||r=='administrador';}
+function rvgGrande(dec,prop,act,plan,campo){plan=plan||{};campo=campo||{};const K=REV_Q.map(x=>x[1]);
+ if(dec=='no_intervenir')return K.some(k=>(+plan[k]||0)>0);if(dec!='cambia')return false;
+ if(String(act||'').trim().toLowerCase()!=String(prop||'').trim().toLowerCase())return true;
+ return K.some(k=>{const p=+plan[k]||0,c=+campo[k]||0;return (p<=0&&c>0)||(p>0&&Math.abs(c-p)/p>0.5);});}
+function revNiPedir(){if($('revni')){$('revni').scrollIntoView({block:'center'});return;}const n=$('revnota');if(!n)return;
+ n.insertAdjacentHTML('beforebegin',`<div id="revni" style="border:2px solid #c62828;border-radius:8px;padding:8px 10px;margin-bottom:8px;background:#fff5f5"><div style="font-size:15px;font-weight:bold;color:#c62828">⛔ ¿Por qué no requiere intervención?</div>
+  <select id="revnimot" style="width:100%;font-size:15px;padding:8px;margin:6px 0"><option value="">Elija el motivo…</option>${NI_MOTIVOS.map(m=>`<option>${m}</option>`).join('')}</select>
+  <div style="font-size:12.5px;color:#555">Tome también una <b>foto</b> que lo muestre (botón 📷 Foto, abajo).${rvgFirmo()?'':' El gestor debe aprobarlo; mientras tanto el plan sigue igual.'}</div>
+  <button type="button" onclick="revNiGuardar()" style="width:100%;margin-top:8px;font-size:15px;padding:10px;background:#c62828;color:#fff;border:0;border-radius:8px">💾 Guardar: no requiere intervención</button></div>`);
+ $('revni').scrollIntoView({block:'center'});}
+function revNiGuardar(){const m=($('revnimot')||{}).value||'';const nota=(($('revnota')||{}).value||'').trim();
+ if(!m){alert('Elija el motivo por el que no requiere intervención.');return;}
+ if(/^Otro/.test(m)&&!nota){alert('Escriba en la nota por qué no requiere intervención.');return;}
+ if(!REV.foto){alert('Falta la foto: tome una foto del sitio con el botón 📷 Foto.');return;}
+ REV._ni=/^Otro/.test(m)?nota.slice(0,120):m;try{revDecision('no_intervenir');}finally{REV._ni=null;}}
+(function(){if(DATA!=='Campo')return;
+ const _rd62=revDecision;revDecision=function(dec){if(dec=='no_intervenir'&&!REV._ni){revNiPedir();return;}
+  const n0=registros().length;const ni=REV._ni;_rd62(dec);
+  try{const R=registros();const u=R[R.length-1];if(R.length>n0&&u&&u.tipo=='revision_plan'&&u.dren){if(dec=='no_intervenir'&&ni)u.dren.motivo=ni;
+    const g=rvgGrande(u.dren.decision,u.dren.propuesta,u.dren.actividad,u.dren.cantidades_plan,u.dren.cantidades);u.dren.cambio_grande=g;
+    if(g&&rvgFirmo())u.dren.firma_gestor=localStorage.getItem('pms_usuario')||'';setRegistros(R);
+    if(g&&!rvgFirmo())setTimeout(()=>avisoCorto('✍ Es un cambio grande: queda esperando la aprobación del gestor. Mientras tanto el plan sigue igual.'),300);}}catch(e){console.error(e);}};
+})();
+// ---- el gestor: «Cambios al plan por aprobar»
+function rvgLocal(){try{return JSON.parse(localStorage.getItem('pms_rvg')||'{}');}catch(e){return {};}}
+function rvgPend(){if(!rvgFirmo())return [];const L=rvgLocal();return ((((VERSION&&VERSION.relaciones)||{}).revisiones_plan)||[]).filter(x=>!L[x.id]);}
+function rvgCant(o){return REV_Q.filter(x=>+o[x[1]]>0).map(x=>`${x[2]} ${(+o[x[1]]).toLocaleString('es-CO',{maximumFractionDigits:1})} ${x[3]}`).join(' · ')||'nada';}
+function rvgTarjeta(x){const cz=x.cod.split('-');const pr=typeof revPrDe=='function'?revPrDe(x.cod):0;
+ return `<div style="background:#fff;border-radius:10px;padding:10px;margin:8px 0;border-left:5px solid ${x.dec=='no_intervenir'?'#c62828':'#004A61'};font-size:13px;line-height:1.4">
+  <b style="font-size:14px">Trayecto ${esc(x.t)} · ${esc(cz[1]||'')} ${esc(cz[2]||'')} · PR ${prTxt(pr)}</b><div style="color:#666;font-size:11.5px">${esc(x.cod)} · ${esc(x.esc)} ${esc(x.anio)} · IRI ${esc(x.iri||'—')} · daño ${esc(x.dano||'—')} %</div>
+  <div style="margin-top:5px"><span style="color:#666">El plan pedía:</span> <b>${esc(x.prop)}</b><br><span style="color:#888;font-size:12px">${rvgCant(x.plan)}</span></div>
+  <div style="margin-top:4px"><span style="color:#666">En campo dicen:</span> <b style="color:${x.dec=='no_intervenir'?'#c62828':'#1565c0'}">${x.dec=='no_intervenir'?'No requiere intervención':esc(x.act)}</b>${x.dec=='no_intervenir'?'':`<br><span style="color:#888;font-size:12px">${rvgCant(x.campo)}</span>`}</div>
+  <div style="margin-top:4px">Motivo: ${x.mot?'<b>'+esc(x.mot)+'</b>':'<span style="color:#c62828">no lo escribió</span>'} · ${x.foto?'📷 con foto (en el PC)':'<span style="color:#c62828">sin foto</span>'}</div>
+  <div style="color:#555;font-size:12px">${esc(String(x.obs||'').replace(/^\[[^\]]*\]\s*/,''))}</div>
+  <div style="color:#666;font-size:11.5px;margin-top:3px">Lo propuso <b>${esc(x.usuario)}</b> el ${esc(x.fecha)}</div>
+  <textarea id="rvgn_${x.id}" placeholder="Su nota (obligatoria si rechaza)" style="width:100%;box-sizing:border-box;font-size:14px;min-height:40px;margin-top:6px"></textarea>
+  <div style="display:flex;gap:6px;margin-top:6px"><button type="button" onclick="rvgFirmar('${x.id}','aprobar')" style="flex:1;border:0;border-radius:8px;padding:11px;background:#2e7d32;color:#fff;font-weight:bold;font-size:14px">✅ Aprobar</button>
+  <button type="button" onclick="rvgFirmar('${x.id}','rechazar')" style="flex:1;border:0;border-radius:8px;padding:11px;background:#c62828;color:#fff;font-weight:bold;font-size:14px">✖ Rechazar</button>
+  <button type="button" onclick="masCerrar();try{irA('${x.cod}',true);}catch(e){}" style="flex:0 0 auto;border:1px solid #004A61;border-radius:8px;padding:11px;background:#fff;color:#004A61;font-size:13px">🗺 Ver</button></div></div>`;}
+function rvgLista(){const L=rvgPend();
+ masPanel('✍ Cambios al plan por aprobar',`<div style="font-size:13px;color:#555;margin:4px 0 6px">Cambios grandes que hicieron en campo al plan (quitar la obra, cambiar la actividad o mover mucho una cantidad). <b>Mientras usted no los apruebe, el plan sigue igual.</b> Si aprueba, entran al plan y el sistema aprende de ellos; si rechaza, se quedan por fuera.</div>`+
+  (L.length?L.map(rvgTarjeta).join(''):'<div style="padding:22px;color:#2e7d32;text-align:center;font-size:15px">✔ No hay cambios esperando su firma.</div>')+
+  `<button type="button" onclick="inicioRol()" style="width:100%;margin-top:8px;border:0;border-radius:8px;padding:11px;background:#eceff1;font-size:14px">🏠 Volver al inicio</button>`);}
+function rvgFirmar(id,ev){const x=((((VERSION&&VERSION.relaciones)||{}).revisiones_plan)||[]).find(y=>y.id==id);if(!x||!rvgFirmo())return;const obs=(($('rvgn_'+id)||{}).value||'').trim();
+ if(ev=='rechazar'&&!obs){alert('Escriba en la nota por qué lo rechaza: así quien lo propuso sabe qué corregir.');return;}
+ if(!confirm((ev=='aprobar'?'¿Aprobar':'¿Rechazar')+' el cambio en '+x.cod+'?'))return;
+ regSistema('revision_gestor',{evento:ev,id_revision:id,codigo:x.cod,observacion:obs});const L=rvgLocal();L[id]=ev;try{localStorage.setItem('pms_rvg',JSON.stringify(L));}catch(e){}try{sincronizar();}catch(e){}
+ avisoCorto(ev=='aprobar'?'✔ Aprobado: entra al plan cuando el PC lo reciba (máximo en una hora).':'✔ Rechazado: el plan sigue como estaba.');rvgLista();}
+(function(){if(DATA!=='Campo')return;
+ const _ir62=inicioRol;inicioRol=function(){const r=_ir62.apply(this,arguments);try{if(!rvgFirmo()||vcActiva())return r;const box=masCaja();const g=box&&[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g||g.querySelector('.c62'))return r;
+   const n=rvgPend().length;g.insertAdjacentHTML('afterbegin',`<div class="c62" onclick="rvgLista()" style="position:relative;background:${n?'#6a1b9a':'#fff'};color:${n?'#fff':'#222'};border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px"><div style="font-size:34px;line-height:1.1">✍</div><div style="font-size:14px;font-weight:bold;margin-top:4px">Cambios al plan</div><div style="font-size:11px;opacity:.85">${n?'esperan su aprobación':'nada pendiente'}</div>${n?`<span style="position:absolute;top:8px;right:8px;background:#d32f2f;color:#fff;border-radius:12px;min-width:24px;height:24px;line-height:24px;font-size:13px;font-weight:bold;padding:0 6px">${n}</span>`:''}</div>`);}catch(e){console.error(e);}return r;};
+})();
+
 </script></body></html>
