@@ -3186,7 +3186,7 @@ function camGiro(){try{const o=CAM.up;if(!o)return 0;const a=(screen.orientation
  window.addEventListener('deviceorientation',e=>{if(e.beta==null||e.gamma==null)return;const b=e.beta*Math.PI/180,g=e.gamma*Math.PI/180;CAM.up=[-Math.cos(b)*Math.sin(g),Math.sin(b)];});
  const _ma46=marcaAgua;marcaAgua=function(cv,extra){try{const k=CAM&&CAM.rotPend;if(k){CAM.rotPend=0;const W=cv.width,H=cv.height;const t=document.createElement('canvas');t.width=W;t.height=H;t.getContext('2d').drawImage(cv,0,0);
     cv.width=H;cv.height=W;const g=cv.getContext('2d');g.save();if(k<0){g.translate(0,W);g.rotate(-Math.PI/2);}else{g.translate(H,0);g.rotate(Math.PI/2);}g.drawImage(t,0,0);g.restore();}}catch(e){console.error('giro foto',e);}return _ma46(cv,extra);};
- const _cf46=camFoto;camFoto=function(){CAM.rotPend=(CAM.modo=='foto'&&(CAM.simple||FOTO_USO==='sin_ia'))?camGiro():0;try{return _cf46.apply(this,arguments);}finally{CAM.rotPend=0;
+ const _cf46=camFoto;camFoto=function(){CAM.rotPend=(CAM.modo=='foto'&&(CAM.simple||FOTO_USO==='sin_ia'||window.CAM_GIRO_TODAS))?camGiro():0;try{return _cf46.apply(this,arguments);}finally{CAM.rotPend=0;
    try{if(CAM.simple){const pv=$('campre');const t=pv&&pv.querySelector('div');if(t&&/ngulo/.test(t.textContent))t.textContent='¿Quedó bien la foto?';}}catch(e){}}};
  // ---- (3) nota: por qué en algunos tramos el sello lo hace BTS
  const _nc46=vcNotaCantidades;vcNotaCantidades=function(){let h=_nc46();try{const c=vcContrato();const prog=vcPrograma();let n=0,ml=0;prog.forEach(r=>r.acts.forEach(x=>{if(x.omitido){n++;ml+=(+x.q||0);}}));
@@ -3682,6 +3682,37 @@ function rutBloque(cod){const L=rutDe(cod).slice().sort((a,b)=>String(b[0]).loca
   <div style="color:#666;font-size:10px">✔ revisado por el inspector o cerrado por el coordinador · ⏳ falta revisarlo · viene de las órdenes de trabajo</div></details>`;}
 (function(){if(DATA!=='Campo')return;
  const _f64=ficha;ficha=function(cod){const r=_f64.apply(this,arguments);try{const box=$('ficha');if(box&&cod&&fichaCod==cod&&!window.REV_ACTIVO&&!box.querySelector('#rutbox')){const h=rutBloque(cod);if(h){const d=box.querySelector('details');if(d)d.insertAdjacentHTML('beforebegin',h);else box.insertAdjacentHTML('beforeend',h);}}}catch(e){console.error('rut',e);}return r;};
+})();
+
+// ================= v265 (Erix, 11-nov-2026, 19:27)
+// (1) FOTO HORIZONTAL TAMBIÉN EN LAS FOTOS PARA LA IA: si el celular está acostado y la pantalla no giró (giro automático apagado), la foto
+//     se guarda derecha, en horizontal. Antes (v246) solo se hacía con las fotos sin IA y la de daños quedaba de lado.
+// (2) «💡 PROPONER UNA MEJORA»: cualquier usuario escribe una idea o avisa de algo que cambió o dejó de funcionar. Llega al PC a una lista
+//     que el administrador analiza; nada se aplica sin su aprobación y solo si mejora el sistema.
+(function(){if(DATA!=='Campo')return;
+ const _cf65=camFoto;camFoto=function(){let g=0;try{g=(CAM.modo=='foto')?camGiro():0;}catch(e){}const r=_cf65.apply(this,arguments);return r;};
+ // el giro lo aplica el envoltorio de v246 leyendo CAM.rotPend: aquí se le quita la condición «solo sin IA»
+ window.CAM_GIRO_TODAS=true;
+ window.addEventListener('deviceorientation',()=>{try{if(!$('cam')||$('cam').style.display=='none'||CAM.modo!='foto')return;let b=$('camhz');const g=camGiro();
+   if(!b){$('cam').insertAdjacentHTML('beforeend','<div id="camhz" style="position:absolute;top:54px;left:50%;transform:translateX(-50%);background:rgba(0,74,97,.85);color:#fff;border-radius:14px;padding:4px 12px;font-size:13px;z-index:6;display:none">↔ Foto horizontal</div>');b=$('camhz');}
+   b.style.display=g?'block':'none';}catch(e){}});
+})();
+const MJ_TIPOS=['💡 Tengo una idea para mejorar','🔁 Algo cambió y antes servía','⚠ Algo no funciona'];
+function mjAbrir(){masPanel('💡 Proponer una mejora',`<div style="font-size:13px;color:#555;margin:4px 0 8px">Cuéntenos qué mejoraría o qué cambió. Su propuesta llega al administrador del sistema, que la analiza; <b>solo se aplica si mejora el sistema</b>.</div>
+ <select id="mjtipo" style="width:100%;font-size:15px;padding:9px;margin-bottom:8px">${MJ_TIPOS.map(t=>`<option>${t}</option>`).join('')}</select>
+ <input id="mjdonde" placeholder="¿En qué pantalla o botón? (opcional)" style="width:100%;box-sizing:border-box;font-size:15px;padding:9px;margin-bottom:8px">
+ <textarea id="mjtxt" placeholder="Escriba aquí, con sus palabras" style="width:100%;box-sizing:border-box;font-size:15px;min-height:110px;padding:9px"></textarea>
+ <button type="button" onclick="mjEnviar()" style="width:100%;margin-top:10px;border:0;border-radius:8px;padding:12px;background:#004A61;color:#fff;font-size:15px;font-weight:bold">📨 Enviar</button>
+ ${mjMias().length?`<div style="margin-top:12px;font-size:12px;color:#666"><b>Lo que usted ha propuesto</b>${mjMias().slice(-6).reverse().map(m=>`<div style="background:#fff;border-radius:8px;padding:7px 9px;margin-top:5px">${esc(m.texto).slice(0,140)}<br><span style="color:#888">${esc(String(m.fecha||'').slice(0,10))} · ${esc(m.estado||'enviada')}${m.respuesta?' · '+esc(m.respuesta):''}</span></div>`).join('')}</div>`:''}`);}
+function mjMias(){const yo=localStorage.getItem('pms_usuario')||'';let L=[];try{L=JSON.parse(localStorage.getItem('pms_mejoras')||'[]');}catch(e){}
+ const pc=((((VERSION&&VERSION.relaciones)||{}).mejoras)||[]).filter(m=>m.usuario==yo);const ids=new Set(pc.map(m=>m.id));return pc.concat(L.filter(m=>!ids.has(m.id)));}
+function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){alert('Escriba un poco más para entender la propuesta.');return;}
+ const ex={clase:($('mjtipo')||{}).value||'',donde:(($('mjdonde')||{}).value||'').trim(),texto:t.slice(0,1200),rol:(typeof rolActual=='function'?rolActual():''),version_app:(document.body.innerHTML.match(/v(\d{3}) \(Erix/g)||[]).pop()||''};
+ const n0=registros().length;regSistema('mejora',ex);try{const R=registros();const u=R[R.length-1];if(R.length>n0&&u){let L=[];try{L=JSON.parse(localStorage.getItem('pms_mejoras')||'[]');}catch(e){}L.push({id:u.id,texto:ex.texto,fecha:u.fecha,estado:'enviada'});localStorage.setItem('pms_mejoras',JSON.stringify(L.slice(-30)));}}catch(e){}
+ try{sincronizar();}catch(e){}masCerrar();avisoCorto('✔ Gracias: su propuesta llegó al administrador.');}
+(function(){if(DATA!=='Campo')return;
+ const _vm65=verMas;verMas=function(){const r=_vm65.apply(this,arguments);try{const v=masCaja();if(v&&!v.querySelector('#mjfila')){const pie=v.querySelector('#pieautor');const h=`<div id="mjfila" onclick="mjAbrir()" style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:8px;padding:9px 10px;margin:5px 0;cursor:pointer"><span style="font-size:20px">💡</span><div><b style="font-size:14px">Proponer una mejora</b><div style="font-size:11px;color:#777">una idea, o algo que cambió o no funciona</div></div></div>`;if(pie)pie.insertAdjacentHTML('beforebegin',h);else(v.firstElementChild||v).insertAdjacentHTML('beforeend',h);}}catch(e){}return r;};
+ if(typeof cuInicio=='function'){const _cu65=cuInicio;cuInicio=function(){const r=_cu65.apply(this,arguments);try{const v=masCaja();if(v&&document.body.classList.contains('cu')&&!v.querySelector('#mjcu')){(v.firstElementChild||v).insertAdjacentHTML('beforeend','<div id="mjcu" onclick="mjAbrir()" style="text-align:center;color:#004A61;font-size:13px;margin-top:14px;cursor:pointer;text-decoration:underline">💡 Proponer una mejora</div>');}}catch(e){}return r;};}
 })();
 
 </script></body></html>
