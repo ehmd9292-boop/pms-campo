@@ -3731,4 +3731,65 @@ function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){a
  window.avEventos=function(){return AV.L.filter(a=>a.k=='ev'||a.k=='rvg').length;};
 })();
 
+// ================= v276 (Erix, 12-nov-2026, 10:40): pedidos desde los roles y la vista del contratista
+// 1) «Proponer mejora» en el inicio de TODOS los roles · 2) «Mis registros» del contratista: solo lo que registraron los usuarios de ese contrato
+// 3) el menú «Más» siempre en el mismo orden (también después de cada actualización) · 4) «Reglas del contrato» para el contratista:
+// solo el cuadro resumen con las cantidades y el avance del contrato en % · 5) «Órdenes de BTS»: solo las asignadas a ese contrato
+(function(){if(DATA!=='Campo')return;
+ const tarjetaMj=()=>`<div class="c276mj" onclick="mjAbrir()" style="position:relative;background:#fff8e1;color:#222;border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px;border:1px solid #f9a825"><div style="font-size:34px;line-height:1.1">💡</div><div style="font-size:14px;font-weight:bold;margin-top:4px">Proponer mejora</div><div style="font-size:11px;opacity:.8">una idea, o algo que no funciona</div></div>`;
+ function ponerMj(){try{const box=masCaja();if(!box||box.querySelector('.c276mj'))return;const g=[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(g)g.insertAdjacentHTML('beforeend',tarjetaMj());}catch(e){}}
+ ['inicioRol','cuInicio'].forEach(n=>{const f=window[n];if(typeof f!='function')return;window[n]=function(){const r=f.apply(this,arguments);ponerMj();return r;};});
+ window.v276Mj=ponerMj;
+ // ---- 2) Mis registros
+ function usuariosDelContrato(){try{if(!vcActiva())return null;const c=vcContrato();if(!c)return new Set();return new Set(usuariosDet().filter(u=>String(u.rol||'').toLowerCase()=='contratista'&&String(u.contrato||u.Contrato||'')==c.contrato).map(u=>u.nombre));}catch(e){return null;}}
+ window.misRegistros=function(){const loc=registros().map(r=>Object.assign({_local:true},r));let env=[];try{env=JSON.parse(localStorage.getItem('pms_enviados')||'[]');}catch(e){}
+  let todos=loc.concat(env.filter(e=>!loc.some(l=>l.id==e.id))).filter(r=>!['sesion','clave','recuperar','validacion','orden','bitacora_rev','acuerdo'].includes(r.tipo));
+  const N=usuariosDelContrato();if(N)todos=todos.filter(r=>N.has(r.usuario));
+  todos.sort((a,b)=>String(b.fecha||b.registrado||'').localeCompare(String(a.fecha||a.registrado||'')));
+  const ico={obra:'🛠',dano:'⚠',nota:'📝',bitacora:'📓',atencion:'🩹',avance:'📍',drenaje:'💧'};
+  let h=`<div style="font-size:12px;color:#555;margin:4px 0 8px">${N?'<b>Solo lo que registró el personal del contrato</b> desde este celular. ':''}Cada registro y en qué va: <span style="color:#9e9e9e">●</span> en el celular · <span style="color:#004A61">●</span> enviado · <span style="color:#2e7d32">●</span> recibido en el PC · <span style="color:#00897b">●</span> revisado · <span style="color:#1565c0">●</span> validado · <span style="color:#4a148c">●</span> aprobado · <span style="color:#b71c1c">●</span> rechazado.</div>`;
+  if(!todos.length)h+=`<div style="padding:14px;color:#666;text-align:center">${N?'El contratista todavía no tiene registros en este celular.':'No hay registros en este celular.'}</div>`;
+  todos.slice(0,120).forEach(r=>{const e=estadoRegistro(r);const f=FICHA[r.codigo]||{};h+=`<div style="background:#fff;border-radius:8px;padding:7px 10px;margin:5px 0;display:flex;gap:8px;align-items:center"><span style="font-size:18px">${ico[r.tipo]||'•'}</span><div style="flex:1;font-size:12px"><b>${esc(r.actividad||r.dano_tipo||r.tipo)}</b>${r.cantidad?' · '+fmt(r.cantidad,1)+' '+esc(r.unidad||''):''}<div style="color:#666;font-size:11px">${String(r.fecha||'').slice(0,10)}${r.codigo?' · Trayecto '+(f.t||r.trayecto||'')+' · '+(f.cz||r.calzada||'')+' '+(f.car||r.carril||'')+' · PR '+prTxt(f.pri||0):(r.frente?' · '+esc(r.frente):'')}${r.usuario?' · '+esc(r.usuario):''}</div><div style="font-size:11px;color:${e.c}">● ${e.t}</div></div></div>`;});
+  masPanel('📋 Mis registros',h);return todos;};
+ // ---- 5) Órdenes de BTS: solo las asignadas a este contrato (por número de contrato, o a nombre exacto del contratista o de su personal)
+ window.otDelContratista=function(){try{const c=vcContrato();if(!c)return [];const k=acNorm(c.contratista);
+   const N=new Set(usuariosDet().filter(u=>String(u.contrato||u.Contrato||'')==c.contrato).map(u=>acNorm(u.nombre)));
+   return ordenes().filter(o=>(o.est=='abierta'||o.est=='revisada')&&(o.ctr==c.contrato||(o.ej&&(acNorm(o.ej)==k||N.has(acNorm(o.ej))))));}catch(e){return [];}};
+ // ---- 4) Reglas del contrato
+ function avanceContrato(c){const A=((VERSION&&VERSION.avance_contratos)||{})[c.contrato]||[];const n1=v=>(+v||0).toLocaleString('es-CO',{maximumFractionDigits:0});
+  let vq=0,ve=0;const filas=(c.items||[]).map(it=>{const m=A.filter(a=>vcMismaAct(it.actividad,a.act));const reg=m.reduce((t,a)=>t+(+a.reg||0),0),val=m.reduce((t,a)=>t+(+a.val||0),0);const q=+it.cantidad||0,pu=+it.precio||0;
+    vq+=q*pu;ve+=Math.min(reg,q)*pu;const pc=q?Math.min(100,100*reg/q):0;
+    return `<tr><td style="padding:5px 6px">${esc(it.actividad)}</td><td style="padding:5px 6px;text-align:right">${n1(q)} ${esc(it.unidad||'')}</td><td style="padding:5px 6px;text-align:right">${n1(reg)}</td><td style="padding:5px 6px;text-align:right;color:#2e7d32">${n1(val)}</td><td style="padding:5px 6px;text-align:right"><b>${fmt(pc,0)} %</b></td></tr>`;}).join('');
+  const tot=vq?100*ve/vq:0;
+  return {tot:tot,html:`<div style="font-size:14px;font-weight:bold;margin:12px 0 4px;color:#004A61">Avance del contrato: ${fmt(tot,0)} %</div>
+   <div style="position:relative;height:14px;background:#e0e0e0;border-radius:7px;overflow:hidden;margin:2px 0 8px"><div style="position:absolute;left:0;top:0;bottom:0;width:${Math.min(100,tot)}%;background:#2e7d32"></div></div>
+   <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;font-size:12px"><tr style="background:#eceff1"><th style="padding:5px 6px;text-align:left">Ítem</th><th style="padding:5px 6px;text-align:right">Contratado</th><th style="padding:5px 6px;text-align:right">Ejecutado</th><th style="padding:5px 6px;text-align:right">Validado</th><th style="padding:5px 6px;text-align:right">Avance</th></tr>${filas||'<tr><td colspan="5" style="padding:8px;color:#888">sin ítems cargados</td></tr>'}</table>
+   <div style="font-size:11px;color:#666;margin-top:4px">Avance = cantidad ejecutada ÷ cantidad contratada de cada ítem; el total pesa cada ítem por su valor. «Validado» es lo que ya revisó BTS.</div>`};}
+ window.v276Avance=avanceContrato;
+ const _rp276=vcReglasPanel;window.vcReglasPanel=function(){if(vcEsAdmin()){const r=_rp276.apply(this,arguments);try{const c=vcContrato();const v=masCaja();const t=v&&v.querySelector('table');if(c&&t&&!v.querySelector('.av276'))t.insertAdjacentHTML('afterend','<div class="av276">'+avanceContrato(c).html+'</div>');}catch(e){}return r;}
+  const c=vcContrato();if(!c)return;const R=vcReglas(c);const vig=R&&(R.estado=='vigente'||RG_APROBADA[c.contrato]);let res='';
+  try{if(vig){const r=vcProgReglas(c,R,null)._res;const fila=(a,b)=>`<tr><td style="padding:5px 6px;color:#555">${a}</td><td style="padding:5px 6px;text-align:right"><b>${b}</b></td></tr>`;
+    res=`<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;font-size:13px">${fila('Tramos',r.tramos)}${fila('Longitud de carril',fmt(r.ml/1000,1)+' km')}${fila('Slurry',fmt(r.m2,0)+' m²')}${fila('Sello de fisuras',fmt(r.sello,0)+' ml')}${fila('Microfresado','0 m²')}${fila('Valor programado',cop(r.costo)+' de '+cop(r.valor))}</table>`;}}catch(e){console.error(e);}
+  masPanel('📐 Reglas del contrato',`<div style="font-size:12px;color:#555;margin:2px 0 6px">${esc(c.contratista||'')} · ${esc(c.contrato)}</div>`+(res?'<div style="font-size:14px;font-weight:bold;margin:6px 0 4px;color:#004A61">Lo programado</div>'+res:'')+avanceContrato(c).html+
+   `<button type="button" onclick="masCerrar()" style="width:100%;margin-top:10px;border:0;border-radius:8px;padding:11px;background:#eceff1;font-size:14px">◀ Volver</button>`);};
+ // ---- 3) el menú «Más» siempre en el mismo orden: título · (contrato) · opciones · Proponer mejora · Salir/Cerrar sesión · pie
+ let ordenando=false;
+ function ordenarMas(){if(ordenando)return;const box=document.getElementById('masbox');if(!box)return;const P=box.firstElementChild;if(!P||!P.firstElementChild)return;
+  if(!/^\s*☰/.test(P.firstElementChild.innerText||''))return;      // solo el menú «Más» (los demás paneles usan la misma caja)
+  ordenando=true;try{
+   [...box.children].slice(1).forEach(x=>P.appendChild(x));      // lo que quedó suelto fuera del menú (p. ej. «Cerrar sesión») entra al menú
+   const H=[...P.children];const cab=H[0];const oc=x=>x.getAttribute('onclick')||'';
+   const esPie=x=>x.id=='pieautor'||/^\s*©/.test(x.innerText||'');const esMj=x=>x.id=='mjfila';const esSalir=x=>/vcSalir|acCerrarSesion/.test(oc(x));
+   const vc=(function(){try{return vcActiva();}catch(e){return false;}})();const esBanner=x=>vc&&!oc(x)&&!esPie(x)&&x!==cab&&/CTO|contrato|S\.A\.S|Ltda/i.test(x.innerText||'');
+   const resto=H.slice(1).filter(x=>!esPie(x)&&!esMj(x)&&!esSalir(x)&&!esBanner(x));
+   const salir=H.filter(esSalir).sort((a,b)=>(/vcSalir/.test(oc(a))?0:1)-(/vcSalir/.test(oc(b))?0:1));
+   const pies=H.filter(esPie);const nt=x=>(x.innerText||'').trim().toLowerCase();pies.slice(1).forEach(x=>{if(nt(x)==nt(pies[0]))x.remove();});
+   const quiero=[cab].concat(H.filter(esBanner),resto,H.filter(esMj),salir,pies.filter(x=>x.isConnected));
+   if(quiero.some((x,i)=>H[i]!==x))quiero.forEach(x=>P.appendChild(x));}catch(e){console.error(e);}finally{ordenando=false;}}
+ window.ordenarMas=ordenarMas;
+ const vigilar=()=>{const box=document.getElementById('masbox');if(!box||box._o276)return;box._o276=1;new MutationObserver(()=>{if(!ordenando)setTimeout(ordenarMas,0);}).observe(box,{childList:true,subtree:true});};
+ vigilar();setTimeout(vigilar,1500);setTimeout(vigilar,5000);
+ const _vm276=verMas;window.verMas=function(){const r=_vm276.apply(this,arguments);try{vigilar();ordenarMas();setTimeout(ordenarMas,60);}catch(e){}return r;};
+})();
+
 </script></body></html>
