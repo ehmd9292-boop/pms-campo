@@ -3378,7 +3378,7 @@ function avNotificar(L){if(!L.length)return;const a=L[0];const pr=(a.pr!=null&&a
    (navigator.serviceWorker&&navigator.serviceWorker.getRegistration?navigator.serviceWorker.getRegistration():Promise.resolve(null)).then(r=>{if(r&&r.showNotification)r.showNotification('PMS Campo: '+tit,op);else new Notification('PMS Campo: '+tit,op);}).catch(()=>{try{new Notification('PMS Campo: '+tit,op);}catch(e){}});}}catch(e){}}
 let AV_OCUP=false;
 function avPedir(manual){if(AV_OCUP||!avQuien()||typeof esNube!='function'||!esNube()||!navigator.onLine)return Promise.resolve(0);AV_OCUP=true;
- return fetchT(SRV+'?accion=avisos&desde='+encodeURIComponent(AV.u||''),{cache:'no-store',redirect:'follow'},20000).then(r=>r.json()).then(j=>{if(!j||!j.ok||!Array.isArray(j.avisos))return 0;
+ return fetchT(SRV+'?accion=avisos&v=2&desde='+encodeURIComponent(AV.u||''),{cache:'no-store',redirect:'follow'},20000).then(r=>r.json()).then(j=>{if(!j||!j.ok||!Array.isArray(j.avisos))return 0;
    const ya=new Set(AV.L.map(a=>a.id));const base=new Set(((VERSION&&VERSION.ordenes)||[]).map(o=>o.org).filter(Boolean));const nuevos=j.avisos.filter(a=>a&&a.id&&!ya.has(a.id));
    const primera=!AV.u;nuevos.forEach(a=>AV.L.push(a));if(j.avisos.length)AV.u=j.avisos.map(a=>a.f).sort().pop();else if(!AV.u)AV.u=j.hora||'';avGuardar();
    const mios=nuevos.filter(a=>!base.has(a.id)&&avMeToca(avOrden(a)));
@@ -3713,6 +3713,22 @@ function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){a
 (function(){if(DATA!=='Campo')return;
  const _vm65=verMas;verMas=function(){const r=_vm65.apply(this,arguments);try{const v=masCaja();if(v&&!v.querySelector('#mjfila')){const pie=v.querySelector('#pieautor');const h=`<div id="mjfila" onclick="mjAbrir()" style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:8px;padding:9px 10px;margin:5px 0;cursor:pointer"><span style="font-size:20px">💡</span><div><b style="font-size:14px">Proponer una mejora</b><div style="font-size:11px;color:#777">una idea, o algo que cambió o no funciona</div></div></div>`;if(pie)pie.insertAdjacentHTML('beforebegin',h);else(v.firstElementChild||v).insertAdjacentHTML('beforeend',h);}}catch(e){}return r;};
  if(typeof cuInicio=='function'){const _cu65=cuInicio;cuInicio=function(){const r=_cu65.apply(this,arguments);try{const v=masCaja();if(v&&document.body.classList.contains('cu')&&!v.querySelector('#mjcu')){(v.firstElementChild||v).insertAdjacentHTML('beforeend','<div id="mjcu" onclick="mjAbrir()" style="text-align:center;color:#004A61;font-size:13px;margin-top:14px;cursor:pointer;text-decoration:underline">💡 Proponer una mejora</div>');}}catch(e){}return r;};}
+})();
+
+// ================= v268 (Erix, 11-nov-2026, 20:20): LOS CELULARES SE ACTUALIZAN ENTRE SÍ POR LA NUBE (camino A)
+// La nube ya avisaba de reportes nuevos y arreglos hechos. Ahora avisa TODO lo liviano: revisar, cerrar, anular y verificar una orden, y la
+// firma del gestor a un cambio del plan. Cada celular lo recibe en un minuto y lo muestra aunque el PC esté apagado; cuando el PC vuelve,
+// su dato manda. Solo se avanza de estado (abierta → revisada → hecha → cerrada); lo que el PC ya procesó no se vuelve a aplicar.
+(function(){if(DATA!=='Campo')return;
+ const RANGO={abierta:0,revisada:1,hecha:2,cerrada:3,anulada:9},EVE={revisar:'revisada',asignar:'revisada',hecha:'hecha',cerrar:'cerrada',anular:'anulada'};
+ function pcHasta(){try{const g=((VERSION&&VERSION.agente_campo)||{}).generado;if(!g)return '';return new Date(String(g).replace(' ','T')+':00-05:00').toISOString();}catch(e){return '';}}
+ const _avo68=avOrden;avOrden=function(a){if(a&&(a.k=='ev'||a.k=='rvg'))return {id:a.id,_hot:'__evento__',est:''};return _avo68(a);};
+ const _o68=ordenes;ordenes=function(){const L=_o68.apply(this,arguments);try{const t0=pcHasta();const E=AV.L.filter(a=>a.k=='ev'&&(!t0||String(a.f)>t0)).sort((x,y)=>String(x.f).localeCompare(String(y.f)));if(!E.length)return L;
+   return L.map(o=>{if(o._loc)return o;let n=o;E.forEach(a=>{if(a.oid!=o.id&&a.oid!=o.org)return;
+     if(a.ev=='verificar'){if(!n.vpor)n=Object.assign({},n,{vpor:a.usuario,_av:1});return;}
+     const d=EVE[a.ev];if(!d||(RANGO[d]||0)<=(RANGO[n.est]||0))return;n=Object.assign({},n,{est:d,_av:1},a.cu?{cu:a.cu}:{});});return n;});}catch(e){return L;}};
+ if(typeof rvgPend=='function'){const _rp68=rvgPend;rvgPend=function(){const L=_rp68.apply(this,arguments);try{const D=new Set(AV.L.filter(a=>a.k=='rvg').map(a=>a.rid));return L.filter(x=>!D.has(x.id));}catch(e){return L;}};}
+ window.avEventos=function(){return AV.L.filter(a=>a.k=='ev'||a.k=='rvg').length;};
 })();
 
 </script></body></html>
