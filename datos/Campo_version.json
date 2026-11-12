@@ -1,5 +1,5 @@
 {
-"generado": "2026-11-12 11:35",
+"generado": "2026-11-12 12:16",
 "secciones": 4788,
 "fotos": 306,
 "escenarios": [
@@ -21,6 +21,5 @@
 "Campo_fichas_5.json.gz"
 ],
 "plan_gz": "Campo_plan.json.gz",
-"extra_gz": "Campo_extra.json.gz",
-"rapida": "2026-11-12 11:35"
+"extra_gz": "Campo_extra.json.gz"
 }

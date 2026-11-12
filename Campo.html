@@ -3737,7 +3737,10 @@ function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){a
 // solo el cuadro resumen con las cantidades y el avance del contrato en % · 5) «Órdenes de BTS»: solo las asignadas a ese contrato
 (function(){if(DATA!=='Campo')return;
  const tarjetaMj=()=>`<div class="c276mj" onclick="mjAbrir()" style="position:relative;background:#fff8e1;color:#222;border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px;border:1px solid #f9a825"><div style="font-size:34px;line-height:1.1">💡</div><div style="font-size:14px;font-weight:bold;margin-top:4px">Proponer mejora</div><div style="font-size:11px;opacity:.8">una idea, o algo que no funciona</div></div>`;
- function ponerMj(){try{const box=masCaja();if(!box||box.querySelector('.c276mj'))return;const g=[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(g)g.insertAdjacentHTML('beforeend',tarjetaMj());}catch(e){}}
+ function ponerMj(){try{const box=masCaja();if(!box||box.querySelector('.c276mj'))return;const g=[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(g){g.insertAdjacentHTML('beforeend',tarjetaMj());return;}
+   // inicio de la cuadrilla (botones grandes en lista): una fila igual después de «Reportar un daño»
+   const fil=[...box.querySelectorAll('[onclick]')].filter(e=>/cuReportar|cuArreglo|otLista/.test(e.getAttribute('onclick')||''));const ult=fil[fil.length-1];
+   if(ult)ult.insertAdjacentHTML('afterend',`<div class="c276mj" onclick="mjAbrir()" style="position:relative;display:flex;align-items:center;gap:14px;background:#fff8e1;color:#222;border:1px solid #f9a825;border-radius:16px;padding:14px 16px;margin:10px 0;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.15)"><span style="font-size:36px">💡</span><div style="text-align:left;flex:1"><div style="font-size:17px;font-weight:bold">Proponer mejora</div><div style="font-size:13px;opacity:.9">una idea, o algo que no funciona</div></div></div>`);}catch(e){}}
  ['inicioRol','cuInicio'].forEach(n=>{const f=window[n];if(typeof f!='function')return;window[n]=function(){const r=f.apply(this,arguments);ponerMj();return r;};});
  window.v276Mj=ponerMj;
  // ---- 2) Mis registros
@@ -3766,11 +3769,12 @@ function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){a
    <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;font-size:12px"><tr style="background:#eceff1"><th style="padding:5px 6px;text-align:left">Ítem</th><th style="padding:5px 6px;text-align:right">Contratado</th><th style="padding:5px 6px;text-align:right">Ejecutado</th><th style="padding:5px 6px;text-align:right">Validado</th><th style="padding:5px 6px;text-align:right">Avance</th></tr>${filas||'<tr><td colspan="5" style="padding:8px;color:#888">sin ítems cargados</td></tr>'}</table>
    <div style="font-size:11px;color:#666;margin-top:4px">Avance = cantidad ejecutada ÷ cantidad contratada de cada ítem; el total pesa cada ítem por su valor. «Validado» es lo que ya revisó BTS.</div>`};}
  window.v276Avance=avanceContrato;
- const _rp276=vcReglasPanel;window.vcReglasPanel=function(){if(vcEsAdmin()){const r=_rp276.apply(this,arguments);try{const c=vcContrato();const v=masCaja();const t=v&&v.querySelector('table');if(c&&t&&!v.querySelector('.av276'))t.insertAdjacentHTML('afterend','<div class="av276">'+avanceContrato(c).html+'</div>');}catch(e){}return r;}
+ const _rp276=vcReglasPanel;window.vcReglasPanel=function(completo){if(vcEsAdmin()&&(completo===true||!vcActiva())){const r=_rp276.apply(this,arguments);try{const c=vcContrato();const v=masCaja();const t=v&&v.querySelector('table');if(c&&t&&!v.querySelector('.av276'))t.insertAdjacentHTML('afterend','<div class="av276">'+avanceContrato(c).html+'</div>');}catch(e){}return r;}
   const c=vcContrato();if(!c)return;const R=vcReglas(c);const vig=R&&(R.estado=='vigente'||RG_APROBADA[c.contrato]);let res='';
   try{if(vig){const r=vcProgReglas(c,R,null)._res;const fila=(a,b)=>`<tr><td style="padding:5px 6px;color:#555">${a}</td><td style="padding:5px 6px;text-align:right"><b>${b}</b></td></tr>`;
     res=`<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;font-size:13px">${fila('Tramos',r.tramos)}${fila('Longitud de carril',fmt(r.ml/1000,1)+' km')}${fila('Slurry',fmt(r.m2,0)+' m²')}${fila('Sello de fisuras',fmt(r.sello,0)+' ml')}${fila('Microfresado','0 m²')}${fila('Valor programado',cop(r.costo)+' de '+cop(r.valor))}</table>`;}}catch(e){console.error(e);}
   masPanel('📐 Reglas del contrato',`<div style="font-size:12px;color:#555;margin:2px 0 6px">${esc(c.contratista||'')} · ${esc(c.contrato)}</div>`+(res?'<div style="font-size:14px;font-weight:bold;margin:6px 0 4px;color:#004A61">Lo programado</div>'+res:'')+avanceContrato(c).html+
+   (vcEsAdmin()?`<div style="margin-top:10px;font-size:11px;color:#777">Así lo ve el contratista. Usted, como administrador, también tiene el panel completo (reglas, borrador y aprobación).</div><button type="button" onclick="vcReglasPanel(true)" style="width:100%;margin-top:6px;border:1px solid #004A61;border-radius:8px;padding:11px;background:#fff;color:#004A61;font-size:13px">⚙ Panel completo (solo administrador)</button>`:'')+
    `<button type="button" onclick="masCerrar()" style="width:100%;margin-top:10px;border:0;border-radius:8px;padding:11px;background:#eceff1;font-size:14px">◀ Volver</button>`);};
  // ---- 3) el menú «Más» siempre en el mismo orden: título · (contrato) · opciones · Proponer mejora · Salir/Cerrar sesión · pie
  let ordenando=false;
@@ -3780,14 +3784,14 @@ function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){a
    [...box.children].slice(1).forEach(x=>P.appendChild(x));      // lo que quedó suelto fuera del menú (p. ej. «Cerrar sesión») entra al menú
    const H=[...P.children];const cab=H[0];const oc=x=>x.getAttribute('onclick')||'';
    const esPie=x=>x.id=='pieautor'||/^\s*©/.test(x.innerText||'');const esMj=x=>x.id=='mjfila';const esSalir=x=>/vcSalir|acCerrarSesion/.test(oc(x));
-   const vc=(function(){try{return vcActiva();}catch(e){return false;}})();const esBanner=x=>vc&&!oc(x)&&!esPie(x)&&x!==cab&&/CTO|contrato|S\.A\.S|Ltda/i.test(x.innerText||'');
+   const vc=(function(){try{return vcActiva();}catch(e){return false;}})();const esBanner=x=>vc&&(!oc(x)||/vcElegirContrato/.test(oc(x)))&&!esPie(x)&&x!==cab&&/CTO|contrato|S\.A\.S|Ltda/i.test(x.innerText||'');
    const resto=H.slice(1).filter(x=>!esPie(x)&&!esMj(x)&&!esSalir(x)&&!esBanner(x));
    const salir=H.filter(esSalir).sort((a,b)=>(/vcSalir/.test(oc(a))?0:1)-(/vcSalir/.test(oc(b))?0:1));
    const pies=H.filter(esPie);const nt=x=>(x.innerText||'').trim().toLowerCase();pies.slice(1).forEach(x=>{if(nt(x)==nt(pies[0]))x.remove();});
    const quiero=[cab].concat(H.filter(esBanner),resto,H.filter(esMj),salir,pies.filter(x=>x.isConnected));
    if(quiero.some((x,i)=>H[i]!==x))quiero.forEach(x=>P.appendChild(x));}catch(e){console.error(e);}finally{ordenando=false;}}
  window.ordenarMas=ordenarMas;
- const vigilar=()=>{const box=document.getElementById('masbox');if(!box||box._o276)return;box._o276=1;new MutationObserver(()=>{if(!ordenando)setTimeout(ordenarMas,0);}).observe(box,{childList:true,subtree:true});};
+ const vigilar=()=>{const box=document.getElementById('masbox');if(!box||box._o276)return;box._o276=1;new MutationObserver(()=>{if(!ordenando)setTimeout(()=>{ordenarMas();try{const t=box.firstElementChild&&box.firstElementChild.firstElementChild;if(t&&/Inicio/.test(t.innerText||''))ponerMj();}catch(e){}},0);}).observe(box,{childList:true,subtree:true});};
  vigilar();setTimeout(vigilar,1500);setTimeout(vigilar,5000);
  const _vm276=verMas;window.verMas=function(){const r=_vm276.apply(this,arguments);try{vigilar();ordenarMas();setTimeout(ordenarMas,60);}catch(e){}return r;};
 })();
