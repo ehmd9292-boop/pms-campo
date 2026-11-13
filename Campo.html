@@ -3417,7 +3417,7 @@ function avActivar(){if(!('Notification' in window)){alert('Este celular no perm
 //     y al COORDINADOR JUNIOR de ese departamento para cerrarlo; a los dos les suena el aviso al instante.
 // (2) en el reporte: «¿Quién lo arregla?» cuadrilla, contratista VyS o Corseing (demarcación y pintura); la orden se les asigna sola cuando exista su contrato.
 // (3) botón «Infraestructura»: hallazgos y actividades en áreas de servicio, peajes y básculas.
-const EJ_OPC=[['cuadrilla','🛠 Cuadrilla de BTS'],['VyS','🎨 Contratista VyS (demarcación y pintura)'],['Corseing','🎨 Contratista Corseing (demarcación y pintura)']];
+const EJ_OPC=[['cuadrilla','🛠 Cuadrilla de BTS'],['Rutinario','🧰 Contratista de mantenimiento rutinario'],['VyS','🎨 Contratista VyS (demarcación y pintura)'],['Corseing','🎨 Contratista Corseing (demarcación y pintura)']];      // v289 (Erix en campo, 13-nov): + contratista de rutinario
 function ejNombre(k){const x=EJ_OPC.find(e=>e[0]==k);return x?x[1].replace(/^\S+\s/,''):k;}
 const INFRA_SITIOS=[{g:'Áreas de servicio',t:'area',L:[['Área de servicio Briceño','Cundinamarca'],['Área de servicio Chocontá','Cundinamarca'],['Área de servicio Paipa','Boyacá']]},
  {g:'Peajes',t:'peaje',L:[['Peaje El Roble','Cundinamarca'],['Peaje Albarracín','Boyacá'],['Peaje Tuta','Boyacá']]},
@@ -3465,7 +3465,7 @@ function infraGuardar(){const sel=$('infsitio');const sitio=sel?sel.value:'';if(
  // la infraestructura no sale como un tipo de elemento del inventario ni del reporte de vía
  ['invGrupos','repAbrir'].forEach(n=>{const f=window[n];if(typeof f=='function')window[n]=sinInfra(f);});try{repAbrir=window.repAbrir;invGrupos=window.invGrupos;}catch(e){}
  // (2) «¿Quién lo arregla?» en el reporte (no en «Hice un arreglo» de la cuadrilla)
- const _ra59=repAbrir;repAbrir=window.repAbrir=function(){const r=_ra59.apply(this,arguments);try{if(CU_ARR)return r;const ot=$('repot');const l=ot&&ot.closest('label');const html=`<div id="repejw" style="margin-top:8px"><div style="font-size:13px;font-weight:bold;margin:6px 0 4px">¿Quién lo arregla?</div><select id="repej" style="width:100%;font-size:15px;padding:9px">${EJ_OPC.map(e=>`<option value="${e[0]}">${e[1]}</option>`).join('')}</select><div style="font-size:11px;color:#666;margin-top:3px">VyS y Corseing hacen demarcación y pintura: la orden les llega cuando BTS cree su contrato.</div></div>`;
+ const _ra59=repAbrir;repAbrir=window.repAbrir=function(){const r=_ra59.apply(this,arguments);try{if(CU_ARR)return r;const ot=$('repot');const l=ot&&ot.closest('label');const html=`<div id="repejw" style="margin-top:8px"><div style="font-size:13px;font-weight:bold;margin:6px 0 4px">¿Quién lo arregla?</div><select id="repej" style="width:100%;font-size:15px;padding:9px">${EJ_OPC.map(e=>`<option value="${e[0]}">${e[1]}</option>`).join('')}</select><div style="font-size:11px;color:#666;margin-top:3px">El contratista de rutinario, VyS y Corseing (demarcación y pintura): la orden queda a su nombre y les llega cuando BTS cargue su contrato.</div></div>`;
    if(l)l.insertAdjacentHTML('afterend',html);else{const o=$('repobs');if(o)o.insertAdjacentHTML('afterend',html);}
    $('repej').addEventListener('change',function(){this._tocado=1;});}catch(e){console.error(e);}return r;};
  // demarcación y pintura → se sugiere el contratista (se puede cambiar)
