@@ -3382,7 +3382,7 @@ function avNotificar(L){if(!L.length)return;const a=L[0];const pr=(a.pr!=null&&a
    (navigator.serviceWorker&&navigator.serviceWorker.getRegistration?navigator.serviceWorker.getRegistration():Promise.resolve(null)).then(r=>{if(r&&r.showNotification)r.showNotification('PMS Campo: '+tit,op);else new Notification('PMS Campo: '+tit,op);}).catch(()=>{try{new Notification('PMS Campo: '+tit,op);}catch(e){}});}}catch(e){}}
 let AV_OCUP=false;
 function avPedir(manual){if(AV_OCUP||!avQuien()||typeof esNube!='function'||!esNube()||!navigator.onLine)return Promise.resolve(0);AV_OCUP=true;
- return fetchT(SRV+'?accion=avisos&v=2&desde='+encodeURIComponent(AV.u||''),{cache:'no-store',redirect:'follow'},20000).then(r=>r.json()).then(j=>{if(!j||!j.ok||!Array.isArray(j.avisos))return 0;
+ return fetchT(SRV+'?accion=avisos&v=3&desde='+encodeURIComponent(AV.u||''),{cache:'no-store',redirect:'follow'},20000).then(r=>r.json()).then(j=>{if(!j||!j.ok||!Array.isArray(j.avisos))return 0;
    const ya=new Set(AV.L.map(a=>a.id));const base=new Set(((VERSION&&VERSION.ordenes)||[]).map(o=>o.org).filter(Boolean));const nuevos=j.avisos.filter(a=>a&&a.id&&!ya.has(a.id));
    const primera=!AV.u;nuevos.forEach(a=>AV.L.push(a));if(j.avisos.length)AV.u=j.avisos.map(a=>a.f).sort().pop();else if(!AV.u)AV.u=j.hora||'';avGuardar();
    const mios=nuevos.filter(a=>!base.has(a.id)&&avMeToca(avOrden(a)));
@@ -4109,6 +4109,103 @@ function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){a
  // al cerrar la lista o cambiar el estado se refresca la banda
  const _ev=window.rfEvento;if(_ev)window.rfEvento=function(){const r=_ev.apply(this,arguments);setTimeout(revisar,300);return r;};
  const _g=window.rfGuardar;if(_g)window.rfGuardar=function(){const r=_g.apply(this,arguments);setTimeout(revisar,300);return r;};
+})();
+
+
+</script><script>
+// ================= v317 (Erix, 18-nov-2026): (1) «las notificaciones deben llegar enseguida»: la reflectividad, sus pasos y a quién se asigna
+// cada orden viajan por la bandeja en la nube (Codigo.gs v317) y la app los ve en un minuto, sin esperar al PC; (2) programación de obra por
+// contrato desde la lista de BTS (Boyacá: otrosí CTO 2026-30 y CTO 2026-51); (3) DOS CONTRATOS DEL MISMO CONTRATISTA SIN TRASLAPE: el que tiene
+// «Despues_de» queda bloqueado (se puede ver, no se puede registrar) hasta que termine el anterior.
+(function(){if(typeof DATA==='undefined'||DATA!=='Campo')return;
+ const H=s=>esc(s==null?'':s);const yo=()=>localStorage.getItem('pms_usuario')||'';
+ const kn=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+ // ------------------------------------------------------------------------------------------------ (1) avisos al instante
+ const _avo=avOrden;avOrden=window.avOrden=function(a){if(a&&(a.k=='rf'||a.k=='rfe'))return {id:a.id,_hot:'__evento__',est:''};return _avo.apply(this,arguments);};
+ const _rd=window.rfDatos;if(_rd)window.rfDatos=function(){const R=_rd.apply(this,arguments);try{
+   const A=((typeof AV!=='undefined'&&AV.L)||[]).filter(a=>a.k=='rf'||a.k=='rfe').sort((x,y)=>String(x.f).localeCompare(String(y.f)));if(!A.length)return R;
+   R.med=R.med.map(m=>Object.assign({},m));const by={};R.med.forEach(m=>{by[m.id]=m;});
+   A.forEach(a=>{if(a.k=='rf'){if(!by[a.mid]){const m={id:a.mid,f:hLocal(a.f),ins:a.usuario,ctr:a.ctr,cst:a.cst,t:a.t,cz:a.cz,car:a.car,pr:a.pr,prt:a.prt,lat:a.lat,lon:a.lon,el:a.el,col:a.col,un:a.un,prom:a.prom,n:a.n,cond:a.cond,obs:a.d,est:'enviada',rmd:a.rmd,_nube:1};R.med.push(m);by[m.id]=m;}
+      if(a.rmd&&by[a.rmd]&&['enviada','objetada'].includes(by[a.rmd].est))by[a.rmd].est='remedida';return;}
+     const m=by[a.mid];if(!m)return;
+     if((a.ev=='aceptada'||a.ev=='objetada')&&m.est=='enviada')Object.assign(m,{est:a.ev,uc:a.usuario,fc:hLocal(a.f),oc:a.d});
+     else if(a.ev=='recibida'&&m.est=='aceptada')Object.assign(m,{est:'recibida',uk:a.usuario,fk:hLocal(a.f)});});}catch(e){console.error(e);}return R;};
+ // órdenes: a quién se asignó (ejecutor y contrato) también llega por la nube
+ const _ord=ordenes;ordenes=window.ordenes=function(){const L=_ord.apply(this,arguments);try{const E=((typeof AV!=='undefined'&&AV.L)||[]).filter(a=>a.k=='ev'&&(a.ej||a.ctr));if(!E.length)return L;
+   return L.map(o=>{let n=o;E.forEach(a=>{if(a.oid!=o.id&&a.oid!=o.org)return;if(n.ctr&&n.ctr==a.ctr)return;let ctr=a.ctr||'';
+     if(!ctr&&a.ej){const k=kn(a.ej);const cs=contratosLista().filter(c=>k&&kn(c.contratista).includes(k.slice(0,8)));ctr=((cs.find(c=>!c.bloqueado_por)||cs[0])||{}).contrato||'';}
+     const cb=contratosLista().find(c=>c.contrato==ctr);if(cb&&cb.bloqueado_por)ctr=cb.bloqueado_por;
+     n=Object.assign({},n,{ej:a.ej||n.ej,ctr:ctr||n.ctr,cu:'',sug:ctr?null:n.sug,_av:1});});return n;});}catch(e){return L;}};
+ // el contratista: aviso de orden nueva de BTS
+ function otAvisar(){try{if(!vcActiva()||typeof otDelContratista!=='function')return;const L=otDelContratista();const ya=JSON.parse(localStorage.getItem('pms_ot_notif')||'null');
+   const ids=L.map(o=>o.id);if(ya===null){localStorage.setItem('pms_ot_notif',JSON.stringify(ids));return;}
+   const nuevos=L.filter(o=>!ya.includes(o.id));if(!nuevos.length)return;localStorage.setItem('pms_ot_notif',JSON.stringify(ya.concat(nuevos.map(o=>o.id)).slice(-400)));
+   const o=nuevos[0];const tit=nuevos.length>1?nuevos.length+' órdenes nuevas de BTS':'Orden nueva de BTS';const cuerpo=`${o.el||''} · Trayecto ${o.t||''}${o.pr!=null&&o.pr!==''?' PR '+prTxt(+o.pr):''}${o.d?' · '+o.d:''}`;
+   try{navigator.vibrate&&navigator.vibrate([400,150,400]);}catch(e){}try{avPitar();}catch(e){}try{avisoCorto('🛠 '+tit+': '+cuerpo);}catch(e){}
+   try{if('Notification' in window&&Notification.permission==='granted')navigator.serviceWorker.getRegistration().then(r=>{const op={body:cuerpo,tag:'pms-ot-'+o.id,icon:'icono_192.png'};if(r&&r.showNotification)r.showNotification('PMS Campo: '+tit,op);else new Notification('PMS Campo: '+tit,op);}).catch(()=>{});}catch(e){}}catch(e){console.error(e);}}
+ window.otAvisar=otAvisar;
+ const _ap=avPedir;avPedir=window.avPedir=function(){const r=_ap.apply(this,arguments);try{Promise.resolve(r).then(()=>{try{if(window.rfRevisarAvisos)rfRevisarAvisos();otAvisar();}catch(e){}});}catch(e){}return r;};
+ setTimeout(otAvisar,5000);setInterval(otAvisar,30000);
+ // ------------------------------------------------------------------------------------------------ (3) candado entre contratos
+ window.ctrBloqueo=function(ctr){const c=contratosLista().find(x=>x.contrato==ctr);if(!c||!c.bloqueado_por)return '';return contratosLista().some(x=>x.contrato==c.bloqueado_por)?c.bloqueado_por:'';};
+ function mismos(c){const k=kn(c&&c.contratista).slice(0,8);return k?contratosLista().filter(x=>kn(x.contratista).includes(k)):[];}
+ window.ctrMios=function(){try{const c=_vcC();return c?mismos(c):[];}catch(e){return [];}};
+ const _vcC=vcContrato;vcContrato=window.vcContrato=function(){const cl=contratosLista();const v=window.VC_SOLO_VER;if(v){const x=cl.find(c=>c.contrato==v);if(x)return x;}
+  const c=_vcC.apply(this,arguments);if(c){const b=ctrBloqueo(c.contrato);if(b){const x=cl.find(y=>y.contrato==b);if(x)return x;}return c;}
+  try{if(vcActiva()){const k=kn(localStorage.getItem('pms_contratista')||'').slice(0,8);const s=cl.find(x=>k&&kn(x.contratista).includes(k)&&!x.bloqueado_por);if(s)return s;}}catch(e){}return c;};
+ const _vca=vcContratoAuto;vcContratoAuto=window.vcContratoAuto=function(){try{const cl=contratosLista();const ctr=localStorage.getItem('pms_contrato')||'';if(!cl.find(c=>c.contrato==ctr)&&vcActiva()){
+   const k=kn(localStorage.getItem('pms_contratista')||'').slice(0,8);const s=cl.find(x=>k&&kn(x.contratista).includes(k)&&!x.bloqueado_por);if(s){localStorage.setItem('pms_contrato',s.contrato);return;}}}catch(e){}return _vca.apply(this,arguments);};
+ // en la ficha: los contratos bloqueados no se pueden escoger; el contratista solo ve el suyo en turno
+ const _ch=campoHtml;campoHtml=window.campoHtml=function(cod){let h=_ch.apply(this,arguments);try{
+   h=h.replace(/(<select id="ccontrato"[^>]*>)([\s\S]*?)(<\/select>)/,(m,a,b,z)=>{
+    b=b.replace(/<option value="([^"]+)"([^>]*)>([^<]*)<\/option>/g,(o,v,at,tx)=>{const bl=ctrBloqueo(v);if(vcActiva()&&!window.VC_SOLO_VER){const c=vcContrato();if(c&&v!=c.contrato)return '';}
+      if(bl)return `<option value="${v}" disabled>${tx} — bloqueado hasta que termine el ${bl}</option>`;return o;});
+    if(vcActiva()){const c=vcContrato();if(c&&!window.VC_SOLO_VER)b=b.replace(new RegExp('<option value="'+c.contrato.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'"'),'<option selected value="'+c.contrato+'"');}
+    return a+b+z;});}catch(e){console.error(e);}return h;};
+ const _gc=guardarCampo;guardarCampo=window.guardarCampo=function(cod){try{if(window.VC_SOLO_VER){alert('Está viendo el '+window.VC_SOLO_VER+' solo para consulta. Vuelva al contrato en turno para registrar (☰ Más → Sus contratos).');return;}
+   const s=$('ccontrato');const v=s?s.value:'';const bl=v?ctrBloqueo(v):'';if(bl){alert('El contrato '+v+' todavía no recibe información de campo: primero debe terminar el '+bl+'. Registre en el '+bl+'.');return;}}catch(e){}
+  return _gc.apply(this,arguments);};
+ const _vro=window.vcRegistrarObra;if(_vro)window.vcRegistrarObra=function(){if(window.VC_SOLO_VER){alert('Está viendo el '+window.VC_SOLO_VER+' solo para consulta. Vuelva al contrato en turno para registrar.');return;}return _vro.apply(this,arguments);};
+ window.ctrVer=function(ctr){window.VC_SOLO_VER=ctr||null;VC_PROG=null;try{vcAplicar();}catch(e){}try{dibujar();}catch(e){}banda();masCerrar();};
+ function banda(){let b=$('vcver317');if(!window.VC_SOLO_VER){if(b)b.remove();return;}if(!b){b=document.createElement('div');b.id='vcver317';b.onclick=()=>ctrVer(null);
+   b.style.cssText='position:fixed;left:8px;right:8px;bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:2950;background:#f9a825;color:#222;border-radius:10px;padding:9px 12px;font-size:13px;box-shadow:0 3px 12px rgba(0,0,0,.3);cursor:pointer';document.body.appendChild(b);}
+  const bl=ctrBloqueo(window.VC_SOLO_VER);b.innerHTML=`👁 <b>Solo consulta: ${H(window.VC_SOLO_VER)}</b>${bl?' · se habilita cuando termine el '+H(bl):''} · <u>volver al contrato en turno</u>`;}
+ window.ctrPanel=function(){const c0=_vcC();const L=c0?mismos(c0):[];const tur=L.find(c=>!ctrBloqueo(c.contrato));
+  const h=`<div style="font-size:12px;color:#555;margin:2px 0 8px">Su empresa tiene ${L.length} contrato(s) activos. Lo que registre en campo va SOLO al contrato en turno; el siguiente se puede ver, pero no recibe información hasta que termine el anterior (así no se mezclan las cantidades).</div>`+
+   L.map(c=>{const bl=ctrBloqueo(c.contrato);const t=tur&&c.contrato==tur.contrato;const viendo=window.VC_SOLO_VER==c.contrato||(!window.VC_SOLO_VER&&t);
+    return `<div style="background:#fff;border-radius:8px;padding:9px 10px;margin:5px 0;border-left:5px solid ${t?'#2e7d32':'#f9a825'};font-size:12px"><b style="font-size:13px">${H(c.contrato)}</b> · ${H(c.contratista)}<div>${t?'✅ <b>En turno</b>: aquí se registra lo de campo':'🔒 Bloqueado: se habilita cuando termine el '+H(bl)}</div><div style="color:#666">Valor ${cop(+c.valor||0)}</div>${viendo?'<div style="color:#004A61;margin-top:3px">👁 es el que está viendo</div>':`<button type="button" onclick="ctrVer(${t?'null':`'${c.contrato}'`})" style="margin-top:5px;border:1px solid #004A61;border-radius:7px;padding:7px 10px;background:#fff;color:#004A61">${t?'◀ Volver a este (en turno)':'👁 Ver este contrato (solo consulta)'}</button>`}</div>`;}).join('');
+  masPanel('📑 Sus contratos',h+`<button type="button" onclick="masCerrar()" style="width:100%;margin-top:10px;border:0;border-radius:8px;padding:11px;background:#eceff1;font-size:14px">◀ Volver</button>`);};
+ const _vm=verMas;verMas=window.verMas=function(){const r0=_vm.apply(this,arguments);try{if(!vcActiva())return r0;const L=ctrMios();if(L.length<2)return r0;const box=masCaja();const P=box&&box.firstElementChild;if(!P||P.querySelector('.m317'))return r0;
+   const tur=L.find(c=>!ctrBloqueo(c.contrato));const it=`<div class="m317" onclick="ctrPanel()" style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:8px;padding:9px 10px;margin:5px 0;cursor:pointer"><span style="font-size:22px">📑</span><div style="flex:1"><b style="font-size:13px">Sus contratos (${L.length})</b><div style="font-size:11px;color:#666">en turno: ${H(tur?tur.contrato:'—')} · el otro se puede ver, no registrar</div></div><span style="color:#999">›</span></div>`;
+   const ref=[...P.children].find(x=>x.id=='mjfila'||/acCerrarSesion|vcSalir/.test(x.getAttribute('onclick')||''));if(ref)ref.insertAdjacentHTML('beforebegin',it);else P.insertAdjacentHTML('beforeend',it);try{ordenarMas();}catch(e){}}catch(e){console.error(e);}return r0;};
+ // ------------------------------------------------------------------------------------------------ (2) programación por contrato desde la lista de BTS
+ function progDe(ctr){try{return (((VERSION&&VERSION.programa_contratos)||{})[ctr])||null;}catch(e){return null;}}
+ window.progDe=progDe;
+ const _vp=vcPrograma;vcPrograma=window.vcPrograma=function(){const c=vcContrato();const P=c&&progDe(c.contrato);if(!P||!P.length)return _vp.apply(this,arguments);
+  const key='v317|'+c.contrato+'|'+P.length+'|'+(c.items||[]).length+'|'+registros().length;if(VC_PROG&&VC_PROG_K==key)return VC_PROG;
+  const aiu=c.aiu||{};const fa=1+((+aiu.A_pct||0)+(+aiu.I_pct||0)+(+aiu.U_pct||0))/100+((+aiu.U_pct||0)/100)*((+aiu.IVA_sobre_U_pct||0)/100);
+  const valor=+c.valor||0;const nsem=Math.max(1,Math.round((+c.plazo_meses||4)*4.33));
+  const items=(c.items||[]).map(i=>Object.assign({rol:vcItemRol(i),pu:+i.precio||0,cap:+i.cantidad||0,un:i.unidad||''},i)).filter(i=>i.rol&&i.pu>0);
+  const iMez=items.find(i=>i.rol=='vol'&&/parcheo|mdc|mezcla|bacheo|concreto/i.test(i.actividad))||items.find(i=>i.rol=='vol');const iFre=items.find(i=>i.rol=='vol'&&/fresad/i.test(i.actividad)&&i!==iMez);
+  const kTr={};items.forEach(i=>{if(i.rol=='tr_fres')kTr[i.actividad]=(iFre&&iFre.cap)?i.cap/iFre.cap:0;if(i.rol=='tr_mez')kTr[i.actividad]=(iMez&&iMez.cap)?i.cap/iMez.cap:0;});
+  let fijo=0;items.filter(i=>i.rol=='fijo').forEach(i=>{fijo+=i.cap*i.pu*fa;});
+  const grupos={};P.forEach((r,ix)=>{const k=r.cod||('x'+ix);const g=grupos[k]=grupos[k]||{cod:r.cod||'',o:r.o,t:r.t,cz:r.cz,car:r.car,vol:0,area:0,L:0,filas:[]};g.vol+=+r.v||0;g.area+=(+r.L||0)*(+r.W||0);g.L+=+r.L||0;g.filas.push(r);g.o=Math.min(g.o,r.o);});
+  const usado={};let gasto=fijo;let volU=0;const prog=[];
+  Object.values(grupos).sort((a,b)=>a.o-b.o).forEach(g=>{const acts=[];items.forEach(i=>{let q=0;if(i.rol=='vol')q=g.vol;else if(i.rol=='area')q=g.area;else if(i.rol=='tr_fres'||i.rol=='tr_mez')q=g.vol*(kTr[i.actividad]||0);else return;if(q>0)acts.push({act:i.actividad,q:q,un:i.un,costo:q*i.pu*fa});});
+   const f0=g.filas[0];const prs=g.filas.map(r=>prTxt(+r.p0)+(r.p1?'–'+prTxt(+r.p1):'')).join(', ');
+   const tr={cod:g.cod,t:g.t,cz:g.cz,car:g.car,pri:g.o,rango:0,anio:2026,L:Math.round(g.L),desc:`Prioridad ${g.o} · ${f0.n||''}${f0.org?' · '+f0.org:''} · PR ${prs}`,acts:acts,vol:g.vol,area:g.area,costo:acts.reduce((s,x)=>s+x.costo,0),fase:2,k:'parcheo',lista:true,prt:prs,nivel:f0.n};
+   gasto+=tr.costo;volU+=tr.vol;acts.forEach(x=>{usado[x.act]=(usado[x.act]||0)+x.q;});prog.push(tr);});
+  items.filter(i=>i.rol=='fijo').forEach(i=>{usado[i.actividad]=i.cap;});
+  let acum=fijo;prog.forEach(r=>{acum+=r.costo;r.acum=acum;r.sem=valor?Math.min(nsem,Math.max(1,Math.ceil(acum/valor*nsem))):1;
+   r.acts.forEach(x=>{const f=FICHA[r.cod]||{};const h=r.cod&&(f.hist||[]).some(z=>String(z[1]).toLowerCase()==x.act.toLowerCase());const p=r.cod&&registros().some(z=>z.codigo==r.cod&&z.tipo=='obra'&&String(z.actividad||'').toLowerCase()==x.act.toLowerCase());x.hecho=!!(h||p);});
+   const mez=r.acts.find(x=>x.act==(iMez||{}).actividad);r.hecho=mez?!!mez.hecho:r.acts.every(x=>x.hecho);});
+  const its={};items.forEach(i=>{its[i.actividad]={pu:i.pu,cap:i.cap,un:i.un};});
+  prog.usado=usado;prog.items=its;prog.gasto=gasto;prog.fijo=fijo;prog.fa=fa;prog.mezcla=true;prog.volU=volU;prog.esp=0.14;prog.lista=true;VC_PROG=prog;VC_PROG_K=key;return prog;};
+ // la lista de parcheo dice de dónde sale cuando es el programa de BTS (no el plan del PMS)
+ const _mp=masPanel;masPanel=window.masPanel=function(t,cuerpo){try{if(/Sitios de parcheo/.test(t)&&vcActiva()!==undefined){const p=vcPrograma();if(p&&p.lista){
+   cuerpo=String(cuerpo).replace(/Sitios del plan del PMS con parcheo[^<]*/,'Programa de BTS para este contrato (PROGRAMA FINAL OCTUBRE 2026 BOYACÁ), repartido por prioridad: primero lo que pidió la interventoría, luego grado de daño 3, 2 y 1. Riego y transportes se derivan del volumen. Toque un sitio para abrir su ficha y registrar.');}}}catch(e){}return _mp.apply(this,arguments);};
+ // al cambiar de contrato o llegar datos nuevos, la programación se recalcula
+ setTimeout(banda,2000);
 })();
 
 </script></body></html>
