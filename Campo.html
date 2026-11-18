@@ -4079,4 +4079,36 @@ function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){a
   return _orv.apply(this,arguments);};
 })();
 
+
+</script><script>
+// ================= v316d (Erix, 18-nov-2026): «en la app del inspector no aparece la notificación de la devolución de la medición».
+// Ahora, apenas la app tiene los datos nuevos, AVISA: suena, vibra, muestra un aviso del celular (si están activados) y deja una banda roja
+// arriba que abre la lista. Inspector: mediciones devueltas por el contratista. Contratista: mediciones nuevas por aceptar.
+// Coordinador junior: mediciones aceptadas por recibir. Cada medición avisa una sola vez por celular; la banda sigue mientras haya pendientes.
+(function(){if(typeof DATA==='undefined'||DATA!=='Campo')return;
+ const yo=()=>localStorage.getItem('pms_usuario')||'';
+ function pendRF(){try{const r=rolActual();const ct=vcActiva()||r=='contratista';const R=rfDatos();if(!R)return {L:[],txt:''};
+   let L=[],txt='';
+   if(ct){const c=vcContrato();if(!c)return {L:[],txt:''};L=R.med.filter(m=>m.est=='enviada'&&(m.ctr?m.ctr==c.contrato:true));txt='medición(es) de reflectividad de BTS por aceptar';}
+   else if(r=='inspector'){L=R.med.filter(m=>m.est=='objetada'&&(!m.ins||m.ins==yo()));txt='medición(es) devuelta(s) por el contratista: medir de nuevo';}
+   else if(['coordinador_junior','gestor','administrador'].includes(r)){L=R.med.filter(m=>m.est=='aceptada'&&(r!='coordinador_junior'||(()=>{try{return enMiZona(m.t);}catch(e){return true;}})()));txt='medición(es) de reflectividad aceptada(s) por recibir';}
+   return {L:L,txt:txt};}catch(e){return {L:[],txt:''};}}
+ function banda(p){let b=document.getElementById('rfband');if(!p.L.length){if(b)b.remove();return;}
+  if(!b){b=document.createElement('div');b.id='rfband';b.onclick=()=>{try{rfLista();}catch(e){}};
+   b.style.cssText='position:fixed;left:8px;right:8px;top:calc(env(safe-area-inset-top,0px) + '+(document.getElementById('vcbanda')?'30px':'6px')+');z-index:2950;background:#c62828;color:#fff;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:bold;box-shadow:0 3px 12px rgba(0,0,0,.3);cursor:pointer;display:flex;gap:8px;align-items:center';document.body.appendChild(b);}
+  const h=`<span style="font-size:20px">🔦</span><span style="flex:1">${p.L.length} ${p.txt}</span><span style="background:#fff;color:#c62828;border-radius:7px;padding:4px 9px">Ver</span>`;if(b.innerHTML!==h)b.innerHTML=h;}
+ function avisar(p){try{const ya=JSON.parse(localStorage.getItem('pms_rf_notif')||'[]');const nuevos=p.L.filter(m=>!ya.includes(m.id+'|'+m.est));if(!nuevos.length)return;
+   localStorage.setItem('pms_rf_notif',JSON.stringify(ya.concat(nuevos.map(m=>m.id+'|'+m.est)).slice(-400)));
+   const m=nuevos[0];const tit=`${nuevos.length} ${p.txt}`;const cuerpo=`${m.el||''} ${m.col||''} · Trayecto ${m.t||''} PR ${m.prt||''}${m.oc?' · «'+m.oc+'»':''}`;
+   try{navigator.vibrate&&navigator.vibrate([400,150,400,150,400]);}catch(e){}try{avPitar();}catch(e){}try{avisoCorto('🔦 '+tit);}catch(e){}
+   try{if('Notification' in window&&Notification.permission==='granted'){const op={body:cuerpo,tag:'pms-rf-'+m.id,renotify:true,icon:'icono_192.png',badge:'icono_192.png',data:{url:location.href}};
+     navigator.serviceWorker.getRegistration().then(r=>{if(r&&r.showNotification)r.showNotification('PMS Campo: '+tit,op);else new Notification('PMS Campo: '+tit,op);}).catch(()=>{try{new Notification('PMS Campo: '+tit,op);}catch(e){}});}}catch(e){}}catch(e){console.error(e);}}
+ function revisar(){try{if(typeof VERSION==='undefined'||!VERSION)return;const p=pendRF();banda(p);avisar(p);}catch(e){}}
+ window.rfRevisarAvisos=revisar;
+ setTimeout(revisar,4000);setInterval(revisar,30000);
+ // al cerrar la lista o cambiar el estado se refresca la banda
+ const _ev=window.rfEvento;if(_ev)window.rfEvento=function(){const r=_ev.apply(this,arguments);setTimeout(revisar,300);return r;};
+ const _g=window.rfGuardar;if(_g)window.rfGuardar=function(){const r=_g.apply(this,arguments);setTimeout(revisar,300);return r;};
+})();
+
 </script></body></html>
