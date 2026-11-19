@@ -2095,21 +2095,12 @@ function vcSalir(){localStorage.removeItem('pms_vista_contratista');vcAplicar();
 function vcContrato(){const ctr=localStorage.getItem('pms_contrato')||'';return contratosLista().find(x=>x.contrato==ctr)||null;}
 const VC_ACT={'Sello de fisuras':[22,'sello'],'Parcheo (mezcla en caliente)':[23,'parcheo'],'Slurry (sello + slurry seal)':[24,'slurry'],'Microfresado':[25,'micro'],'Fresado + MDC/MSC':[27,'fresado']};
 let VC_PROG=null,VC_PROG_K='';
-function vcPrograma(){const c=vcContrato();if(!c)return [];const key=c.contrato+'|'+Object.keys(DATOS).join(',')+'|'+(c.items||[]).length;if(VC_PROG&&VC_PROG_K==key)return VC_PROG;
- const esc=DATOS['Base BC']?'Base BC':Object.keys(DATOS)[0];if(!esc)return [];const anios=Object.keys(DATOS[esc]).map(Number).sort((a,b)=>a-b);
- const items=(c.items||[]).filter(i=>VC_ACT[i.actividad]&&+i.precio>0);const aiu=c.aiu||{};const fa=1+((+aiu.A_pct||0)+(+aiu.I_pct||0)+(+aiu.U_pct||0))/100+((+aiu.U_pct||0)/100)*((+aiu.IVA_sobre_U_pct||0)/100);
- const valor=+c.valor||0;const nsem=Math.max(1,Math.round((+c.plazo_meses||4)*4.33));let filas=[];
- anios.forEach(a=>{(DATOS[esc][a]||[]).forEach(f=>{if(f[19]=='none'||f[1]=='none'||f[1]=='excl')return;items.forEach(it=>{const q=+f[VC_ACT[it.actividad][0]]||0;if(q<=0)return;filas.push({cod:f[0],t:f[18],pri:+f[6]||99,rango:+f[15]||0,anio:a,act:it.actividad,un:it.unidad,q:q,pu:+it.precio,costo:q*it.precio*fa,L:f[17],k:VC_ACT[it.actividad][1],desc:f[5]||''});});});});
- filas.sort((x,y)=>x.anio-y.anio||x.pri-y.pri||x.rango-y.rango||x.t.localeCompare(y.t,undefined,{numeric:true}));
- let acum=0;const qAct={};const prog=[];
- filas.forEach(r=>{const it=items.find(i=>i.actividad==r.act);const cap=+it.cantidad||0;if(cap&&(qAct[r.act]||0)+r.q>cap*1.02)return;if(valor&&acum+r.costo>valor*1.005)return;acum+=r.costo;qAct[r.act]=(qAct[r.act]||0)+r.q;prog.push(r);});
- // v227b (Erix, 6-nov-2026): la urgencia decide QUÉ tramos entran con el dinero del contrato; el ORDEN de ejecución es por trayecto y PR, de un extremo al otro
- const prN=c_=>{const m=/Pr (\d+)/.exec(String(c_));return m?+m[1]:0;};const tN=t_=>parseFloat(String(t_).replace(/[^\d.]/g,''))||0;
- prog.sort((x,y)=>tN(x.t)-tN(y.t)||String(x.t).localeCompare(String(y.t))||prN(x.cod)-prN(y.cod)||String(x.cod).localeCompare(String(y.cod)));
- acum=0;prog.forEach(r=>{acum+=r.costo;r.acum=acum;r.sem=valor?Math.min(nsem,Math.max(1,Math.ceil(acum/valor*nsem))):1;});
- // lo ya registrado en este celular o en el PC (historial de la ficha) marca el tramo como ejecutado
- prog.forEach(r=>{const f=FICHA[r.cod]||{};const h=(f.hist||[]).some(x=>String(x[1]).toLowerCase()==r.act.toLowerCase()&&(!c.contrato||!x[11]||x[11]==c.contrato));const p=registros().some(x=>x.codigo==r.cod&&x.tipo=='obra'&&String(x.actividad||'').toLowerCase()==r.act.toLowerCase());r.hecho=h||p;});
- VC_PROG=prog;VC_PROG_K=key;return prog;}
+// v320 (Erix, 18-nov-2026: integrar los parches uno por uno): vcPrograma arma la programación del contratista (qué tramos, qué cantidades
+// y en qué orden, hasta donde alcanza el dinero del contrato). Antes eran 11 capas, una encima de otra; 3 ya no se usaban (v227, v228, v229).
+// Ahora: la base (VC_PROG_BASE, la de v231) y encima, en el orden de las partes, las capas registradas con vcProgramaCapa(nombre, función(sig)):
+// cada capa recibe sig() = la programación de las capas de abajo y la puede usar, ajustar o reemplazar. Para verlas: VC_PROG_CAPAS.map(k=>k.nombre)
+function vcProgramaCapa(nombre,fn){(window.VC_PROG_CAPAS=window.VC_PROG_CAPAS||[]).push({nombre,fn});}
+function vcPrograma(){let f=window.VC_PROG_BASE||(()=>[]);for(const k of (window.VC_PROG_CAPAS||[])){const sig=f;f=()=>k.fn(sig);}return f();}
 function vcSemanaFecha(c,s){try{if(!c.fecha_inicio)return '';const d=new Date(c.fecha_inicio+'T00:00:00');d.setDate(d.getDate()+(s-1)*7);return d.toLocaleDateString('es-CO',{day:'2-digit',month:'short'});}catch(e){return '';}}
 function vcProgramacion(){const c=vcContrato();if(!c){alert('Elija primero el contrato (abra una ficha y escójalo).');return;}const prog=vcPrograma();const tot=prog.reduce((s,r)=>s+r.costo,0);const hechos=prog.filter(r=>r.hecho).length;
  const porSem={};prog.forEach(r=>{(porSem[r.sem]=porSem[r.sem]||[]).push(r);});
@@ -2149,26 +2140,8 @@ function vcProgramacion(){const c=vcContrato();if(!c){alert('Elija primero el co
 // SELLO + SLURRY sin microfresado; el sello de fisuras puede pasarse de la cantidad contratada (no limita).
 function vcContratoAuto(){try{const cl=contratosLista();const ctr=localStorage.getItem('pms_contrato')||'';if(!cl.find(c=>c.contrato==ctr)){if(cl.length>=1){localStorage.setItem('pms_contrato',cl[0].contrato);if(cl[0].contratista)localStorage.setItem('pms_contratista',cl[0].contratista);}}}catch(e){}}
 const VC_Q={'Microfresado':[25,'m²'],'Slurry (sello + slurry seal)':[24,'m²'],'Sello de fisuras':[22,'ml'],'Parcheo (mezcla en caliente)':[23,'m³'],'Fresado + MDC/MSC':[27,'m²']};
-vcPrograma=function(){vcContratoAuto();const c=vcContrato();if(!c)return [];const key='v228|'+c.contrato+'|'+Object.keys(DATOS).join(',')+'|'+(c.items||[]).length;if(VC_PROG&&VC_PROG_K==key)return VC_PROG;
- const esc=DATOS['Base BC']?'Base BC':Object.keys(DATOS)[0];if(!esc)return [];const anios=Object.keys(DATOS[esc]).map(Number).sort((a,b)=>a-b);
- const items={};(c.items||[]).forEach(i=>{if(VC_Q[i.actividad]&&+i.precio>0)items[i.actividad]={pu:+i.precio,cap:+i.cantidad||0,un:i.unidad||VC_Q[i.actividad][1]};});
- const aiu=c.aiu||{};const fa=1+((+aiu.A_pct||0)+(+aiu.I_pct||0)+(+aiu.U_pct||0))/100+((+aiu.U_pct||0)/100)*((+aiu.IVA_sobre_U_pct||0)/100);
- const valor=+c.valor||0;const nsem=Math.max(1,Math.round((+c.plazo_meses||4)*4.33));
- const vistos=new Set();const tramos=[];
- anios.forEach(a=>{(DATOS[esc][a]||[]).forEach(f=>{if(vistos.has(f[0]))return;if(f[19]=='none'||f[1]=='none'||f[1]=='excl')return;const acts=[];
-  Object.keys(items).forEach(act=>{const q=+f[VC_Q[act][0]]||0;if(q>0)acts.push({act:act,q:q,un:items[act].un,costo:q*items[act].pu*fa});});
-  if(!acts.length)return;vistos.add(f[0]);const micro=acts.find(x=>x.act=='Microfresado');const slu=acts.find(x=>x.act=='Slurry (sello + slurry seal)');
-  tramos.push({cod:f[0],t:f[18],pri:+f[6]||99,rango:+f[15]||0,anio:a,L:f[17],desc:f[5]||'',acts:acts,costo:acts.reduce((s,x)=>s+x.costo,0),fase:micro?1:(slu?2:3),k:micro?'micro':(slu?'slurry':'sello')});});});
- const porUrg=(x,y)=>x.anio-y.anio||x.pri-y.pri||x.rango-y.rango;const prN=c_=>{const m=/Pr (\d+)/.exec(String(c_));return m?+m[1]:0;};const tN=t_=>parseFloat(String(t_).replace(/[^\d.]/g,''))||0;
- const porVia=(x,y)=>tN(x.t)-tN(y.t)||String(x.t).localeCompare(String(y.t))||prN(x.cod)-prN(y.cod);
- const usado={};let gasto=0;const prog=[];
- const cabe=tr=>{if(valor&&gasto+tr.costo>valor*1.005)return false;for(const x of tr.acts){const cap=items[x.act].cap;if(x.act=='Sello de fisuras')continue;if(cap&&(usado[x.act]||0)+x.q>cap*1.02)return false;}return true;};
- const toma=tr=>{gasto+=tr.costo;tr.acts.forEach(x=>{usado[x.act]=(usado[x.act]||0)+x.q;});prog.push(tr);};
- [1,2,3].forEach(fase=>{const sel=[];tramos.filter(t=>t.fase==fase).sort(porUrg).forEach(tr=>{if(cabe(tr)){toma(tr);sel.push(tr);}});sel.sort(porVia);sel.forEach((tr,i)=>{tr.orden=prog.indexOf(tr);});});
- // orden de ejecución: fase 1 por trayecto y PR, luego fase 2, luego fase 3; las semanas se reparten por el costo acumulado
- prog.sort((x,y)=>x.fase-y.fase||porVia(x,y));let acum=0;prog.forEach(r=>{acum+=r.costo;r.acum=acum;r.sem=valor?Math.min(nsem,Math.max(1,Math.ceil(acum/valor*nsem))):1;
-  r.acts.forEach(x=>{const f=FICHA[r.cod]||{};const h=(f.hist||[]).some(z=>String(z[1]).toLowerCase()==x.act.toLowerCase());const p=registros().some(z=>z.codigo==r.cod&&z.tipo=='obra'&&String(z.actividad||'').toLowerCase()==x.act.toLowerCase());x.hecho=h||p;});r.hecho=r.acts.every(x=>x.hecho);});
- prog.usado=usado;prog.items=items;prog.gasto=gasto;VC_PROG=prog;VC_PROG_K=key;return prog;};
+// v320: aquí estaba la programación v228 de vcPrograma, que ya no se usaba (la reemplazó la versión siguiente sin llamarla). Ver docs\MAPA_MODULOS.md.
+
 function vcResumenCant(prog){const it=prog.items||{};const u=prog.usado||{};return Object.keys(it).map(a=>{const cap=it[a].cap;const q=u[a]||0;const pasa=cap&&q>cap*1.02;return `${a}: <b>${fmt(q,0)}</b> de ${cap?fmt(cap,0):'—'} ${it[a].un}${pasa?' <span style="color:#b26a00">(se pasa: el sello puede ser más)</span>':''}`;}).join('<br>');}
 vcProgramacion=function(){vcContratoAuto();const c=vcContrato();if(!c){alert('No hay contrato activo en la app. En el PC: Contratos → Ficha del contrato (Activo).');return;}const prog=vcPrograma();const tot=prog.gasto||0;const hechos=prog.filter(r=>r.hecho).length;
  const porSem={};prog.forEach(r=>{(porSem[r.sem]=porSem[r.sem]||[]).push(r);});const F={1:'microfresado + sello + slurry',2:'sello + slurry (sin microfresado)',3:'solo sello de fisuras'};
@@ -2210,24 +2183,8 @@ function vcFicha(cod,abrir){const f=FICHA[cod];if(!f)return;if(f.pri==null){cons
 // ================= v229 (Erix en campo, 6-nov-2026): mapa solo con los tramos del contrato, convenciones, ficha que abre al tocar,
 // frente de la bitácora por lista o GPS (sin escribir), y el microfresado se toma del plan (primer año) y el resto del dinero va a slurry y sello.
 let VC_MICRO_ANIOS=1;      // cuántos años del plan se toman para el microfresado (1 = solo el primer año del plan)
-const _vcProg3=vcPrograma;vcPrograma=function(){vcContratoAuto();const c=vcContrato();if(!c)return [];const key='v229|'+VC_MICRO_ANIOS+'|'+c.contrato+'|'+Object.keys(DATOS).join(',')+'|'+(c.items||[]).length;if(VC_PROG&&VC_PROG_K==key)return VC_PROG;
- const esc=DATOS['Base BC']?'Base BC':Object.keys(DATOS)[0];if(!esc)return [];const anios=Object.keys(DATOS[esc]).map(Number).sort((a,b)=>a-b);const aMicro=anios[0]+VC_MICRO_ANIOS-1;
- const items={};(c.items||[]).forEach(i=>{if(VC_Q[i.actividad]&&+i.precio>0)items[i.actividad]={pu:+i.precio,cap:+i.cantidad||0,un:i.unidad||VC_Q[i.actividad][1]};});
- const aiu=c.aiu||{};const fa=1+((+aiu.A_pct||0)+(+aiu.I_pct||0)+(+aiu.U_pct||0))/100+((+aiu.U_pct||0)/100)*((+aiu.IVA_sobre_U_pct||0)/100);
- const valor=+c.valor||0;const nsem=Math.max(1,Math.round((+c.plazo_meses||4)*4.33));const vistos=new Set();const tramos=[];
- anios.forEach(a=>{(DATOS[esc][a]||[]).forEach(f=>{if(vistos.has(f[0]))return;if(f[19]=='none'||f[1]=='none'||f[1]=='excl')return;const acts=[];
-  Object.keys(items).forEach(act=>{const q=+f[VC_Q[act][0]]||0;if(q>0)acts.push({act:act,q:q,un:items[act].un,costo:q*items[act].pu*fa});});
-  if(!acts.length)return;vistos.add(f[0]);const micro=acts.find(x=>x.act=='Microfresado');const slu=acts.find(x=>x.act=='Slurry (sello + slurry seal)');
-  tramos.push({cod:f[0],t:f[18],pri:+f[6]||99,rango:+f[15]||0,anio:a,L:f[17],desc:f[5]||'',acts:acts,costo:acts.reduce((s,x)=>s+x.costo,0),fase:micro?1:(slu?2:3),k:micro?'micro':(slu?'slurry':'sello')});});});
- const porUrg=(x,y)=>x.anio-y.anio||x.pri-y.pri||x.rango-y.rango;const prN=c_=>{const m=/Pr (\d+)/.exec(String(c_));return m?+m[1]:0;};const tN=t_=>parseFloat(String(t_).replace(/[^\d.]/g,''))||0;
- const porVia=(x,y)=>tN(x.t)-tN(y.t)||String(x.t).localeCompare(String(y.t))||prN(x.cod)-prN(y.cod);
- const usado={};let gasto=0;const prog=[];
- const cabe=tr=>{if(valor&&gasto+tr.costo>valor*1.005)return false;for(const x of tr.acts){if(x.act!='Slurry (sello + slurry seal)')continue;const cap=items[x.act].cap;if(cap&&(usado[x.act]||0)+x.q>cap*1.02)return false;}return true;};
- const toma=tr=>{gasto+=tr.costo;tr.acts.forEach(x=>{usado[x.act]=(usado[x.act]||0)+x.q;});prog.push(tr);};
- [1,2,3].forEach(fase=>{tramos.filter(t=>t.fase==fase&&(fase!=1||t.anio<=aMicro)).sort(porUrg).forEach(tr=>{if(cabe(tr))toma(tr);});});
- prog.sort((x,y)=>x.fase-y.fase||porVia(x,y));let acum=0;prog.forEach(r=>{acum+=r.costo;r.acum=acum;r.sem=valor?Math.min(nsem,Math.max(1,Math.ceil(acum/valor*nsem))):1;
-  r.acts.forEach(x=>{const f=FICHA[r.cod]||{};const h=(f.hist||[]).some(z=>String(z[1]).toLowerCase()==x.act.toLowerCase());const p=registros().some(z=>z.codigo==r.cod&&z.tipo=='obra'&&String(z.actividad||'').toLowerCase()==x.act.toLowerCase());x.hecho=h||p;});r.hecho=r.acts.every(x=>x.hecho);});
- prog.usado=usado;prog.items=items;prog.gasto=gasto;prog.aMicro=aMicro;VC_PROG=prog;VC_PROG_K=key;return prog;};
+// v320: aquí estaba la programación v229 de vcPrograma, que ya no se usaba (la reemplazó la versión siguiente sin llamarla). Ver docs\MAPA_MODULOS.md.
+
 vcDibujar=function(){vcContratoAuto();try{capa.clearLayers();}catch(e){}try{capaInt.clearLayers();}catch(e){}try{if(window.MODLAY){map.removeLayer(MODLAY);window.MODLAY=null;}}catch(e){}
  const c=vcContrato();const prog=c?vcPrograma():[];
  prog.forEach(r=>{const q=COORDS[r.cod];if(!q)return;const ln=L.polyline([[q[0],q[1]],[q[2],q[3]]],{color:(COL[r.k]||['#004A61'])[0],weight:8,opacity:r.hecho?.45:.95,dashArray:r.hecho?'4,6':null});
@@ -2294,7 +2251,7 @@ function vcSalirCorreo(){localStorage.removeItem('pms_vista_contratista');localS
 var VC_FILTRO={t:'',k:'',e:''};
 const VC_FASE={1:'microfresado + sello + slurry',2:'sello de fisuras y luego slurry seal',3:'solo sello de fisuras'};
 function vcCzCar(cod){const f=FICHA[cod]||{};if(f.cz||f.car)return [f.cz||'',f.car||''];const p=String(cod).split('-');return p.length>=3?[p[1],p[2]]:['',''];}
-const _vcProg5=vcPrograma;vcPrograma=function(){vcContratoAuto();const c=vcContrato();if(!c)return [];const key='v231|'+VC_MICRO_ANIOS+'|'+c.contrato+'|'+Object.keys(DATOS).join(',')+'|'+(c.items||[]).length;if(VC_PROG&&VC_PROG_K==key)return VC_PROG;
+window.VC_PROG_BASE=function(){vcContratoAuto();const c=vcContrato();if(!c)return [];const key='v231|'+VC_MICRO_ANIOS+'|'+c.contrato+'|'+Object.keys(DATOS).join(',')+'|'+(c.items||[]).length;if(VC_PROG&&VC_PROG_K==key)return VC_PROG;
  const esc=DATOS['Base BC']?'Base BC':Object.keys(DATOS)[0];if(!esc)return [];const anios=Object.keys(DATOS[esc]).map(Number).sort((a,b)=>a-b);const aMicro=anios[0]+VC_MICRO_ANIOS-1;
  const items={};(c.items||[]).forEach(i=>{if(VC_Q[i.actividad]&&+i.precio>0)items[i.actividad]={pu:+i.precio,cap:+i.cantidad||0,un:i.unidad||VC_Q[i.actividad][1]};});
  const aiu=c.aiu||{};const fa=1+((+aiu.A_pct||0)+(+aiu.I_pct||0)+(+aiu.U_pct||0))/100+((+aiu.U_pct||0)/100)*((+aiu.IVA_sobre_U_pct||0)/100);
@@ -2320,7 +2277,7 @@ const _vcProg5=vcPrograma;vcPrograma=function(){vcContratoAuto();const c=vcContr
  tramos.filter(t=>t.fase==3&&t.acts.reduce((s,x)=>s+x.q,0)>=30).sort(porUrg).forEach(tr=>{if(!valor||gasto+costoDe(tr)<=valor)toma(tr);});
  prog.sort(porVia);let acum=0;prog.forEach(r=>{acum+=r.costo;r.acum=acum;r.sem=valor?Math.min(nsem,Math.max(1,Math.ceil(acum/valor*nsem))):1;
   r.acts.forEach(x=>{const f=FICHA[r.cod]||{};const h=vcHechoHist(f,x.act);const p=registros().some(z=>z.codigo==r.cod&&z.tipo=='obra'&&vcMismaAct(z.actividad,x.act));x.hecho=h||p;});r.hecho=r.acts.filter(x=>!x.omitido).every(x=>x.hecho);});
- prog.usado=usado;prog.items=items;prog.gasto=gasto;prog.aMicro=aMicro;prog.fa=fa;VC_PROG=prog;VC_PROG_K=key;return prog;};
+ prog.usado=usado;prog.items=items;prog.gasto=gasto;prog.aMicro=aMicro;prog.fa=fa;VC_PROG=prog;VC_PROG_K=key;return prog;};      // v320: la base de vcPrograma (v231); las capas de encima se registran con vcProgramaCapa()
 function vcPasaFiltro(r){if(VC_FILTRO.t&&String(r.t)!=VC_FILTRO.t)return false;if(VC_FILTRO.k&&r.k!=VC_FILTRO.k)return false;if(VC_FILTRO.e=='p'&&r.hecho)return false;if(VC_FILTRO.e=='h'&&!r.hecho)return false;return true;}
 function vcFiltroHtml(prog,idp){const ts=[...new Set(prog.map(r=>String(r.t)))].sort((a,b)=>(parseFloat(a.replace(/[^\d.]/g,''))||0)-(parseFloat(b.replace(/[^\d.]/g,''))||0)||a.localeCompare(b));
  const o=(v,l,s)=>`<option value="${v}"${s==v?' selected':''}>${l}</option>`;
@@ -2429,7 +2386,7 @@ function vcEsMezcla(c){const its=(c&&c.items||[]);return !its.some(i=>VC_Q[i.act
 function vcItemRol(i){const a=String(i.actividad||'').toLowerCase(),u=String(i.unidad||'').toLowerCase();
  if(/cama ?baja|equipos/.test(a)&&/mes/.test(u))return 'fijo';if(/transporte/.test(a)&&/fresad/.test(a))return 'tr_fres';if(/transporte/.test(a))return 'tr_mez';
  if(/riego|liga|imprim/.test(a))return 'area';if(/fresad/.test(a))return 'vol';if(/parcheo|mdc|mezcla|bacheo|concreto asf/.test(a))return 'vol';return '';}
-const _vcProg7=vcPrograma;vcPrograma=function(){vcContratoAuto();const c=vcContrato();if(!c)return [];if(!vcEsMezcla(c))return _vcProg7();
+vcProgramaCapa('v233 contrato de parcheo y bacheo con MDC',function(sig){vcContratoAuto();const c=vcContrato();if(!c)return [];if(!vcEsMezcla(c))return sig();
  const key='v233|'+VC_ESP_M+'|'+c.contrato+'|'+Object.keys(DATOS).join(',')+'|'+(c.items||[]).length;if(VC_PROG&&VC_PROG_K==key)return VC_PROG;
  const esc=DATOS['Base BC']?'Base BC':Object.keys(DATOS)[0];if(!esc)return [];const anios=Object.keys(DATOS[esc]).map(Number).sort((a,b)=>a-b);
  const aiu=c.aiu||{};const fa=1+((+aiu.A_pct||0)+(+aiu.I_pct||0)+(+aiu.U_pct||0))/100+((+aiu.U_pct||0)/100)*((+aiu.IVA_sobre_U_pct||0)/100);
@@ -2453,7 +2410,7 @@ const _vcProg7=vcPrograma;vcPrograma=function(){vcContratoAuto();const c=vcContr
   r.acts.forEach(x=>{const f=FICHA[r.cod]||{};const h=(f.hist||[]).some(z=>String(z[1]).toLowerCase()==x.act.toLowerCase());const p=registros().some(z=>z.codigo==r.cod&&z.tipo=='obra'&&String(z.actividad||'').toLowerCase()==x.act.toLowerCase());x.hecho=h||p;});
   const mez=r.acts.find(x=>x.act==(iMez||{}).actividad);r.hecho=mez?!!mez.hecho:r.acts.every(x=>x.hecho);});
  const its={};items.forEach(i=>{its[i.actividad]={pu:i.pu,cap:i.cap,un:i.un};});
- prog.usado=usado;prog.items=its;prog.gasto=gasto;prog.fijo=fijo;prog.fa=fa;prog.mezcla=true;prog.volU=volU;prog.esp=ESP;VC_PROG=prog;VC_PROG_K=key;return prog;};
+ prog.usado=usado;prog.items=its;prog.gasto=gasto;prog.fijo=fijo;prog.fa=fa;prog.mezcla=true;prog.volU=volU;prog.esp=ESP;VC_PROG=prog;VC_PROG_K=key;return prog;});
 VC_FASE[1]=VC_FASE[1];      // (sin cambio para micro/slurry/sello)
 const VC_FASE_MEZ={1:'fresado + reposición MDC',2:'parcheo y bacheo MDC'};
 const _vcListado7=vcListado;vcListado=function(){vcContratoAuto();const c=vcContrato();if(!c||!vcEsMezcla(c))return _vcListado7();const prog=vcPrograma();const sel=prog.filter(vcPasaFiltro);
@@ -2503,7 +2460,7 @@ function vcSlurryPendiente(){const lst=(VERSION&&VERSION.slurry_pendiente)||[];i
  if((Date.now()-new Date(dm).getTime())>365*86400e3)return;      // (respaldo, sin lista del PC) microfresado de hace más de 1 año: ya no aplica
  if(qm<150)return;      // fracciones pequeñas: no son un tramo microfresado completo
  out.push({cod:cod,fecha_micro:dm,m2:qm});});return out;}
-const _vcProg9=vcPrograma;vcPrograma=function(){vcContratoAuto();const c=vcContrato();const prog=_vcProg9();if(!c||!prog||prog.mezcla)return prog;
+vcProgramaCapa('v234 slurry pendiente de tramos ya microfresados',function(sig){vcContratoAuto();const c=vcContrato();const prog=sig();if(!c||!prog||prog.mezcla)return prog;
  const SLU=(c.items||[]).find(i=>/slurry/i.test(i.actividad)&&+i.precio>0);if(!SLU)return prog;if(prog.v234)return prog;
  const aiu=c.aiu||{};const fa=1+((+aiu.A_pct||0)+(+aiu.I_pct||0)+(+aiu.U_pct||0))/100+((+aiu.U_pct||0)/100)*((+aiu.IVA_sobre_U_pct||0)/100);const valor=+c.valor||0;
  const pend=vcSlurryPendiente();if(!pend.length){prog.v234=true;return prog;}
@@ -2518,7 +2475,7 @@ const _vcProg9=vcPrograma;vcPrograma=function(){vcContratoAuto();const c=vcContr
  const res=todos.filter(r=>!r.quitar);const tN=t_=>parseFloat(String(t_).replace(/[^\d.]/g,''))||0;const prN=c_=>{const m=/Pr (\d+)/.exec(String(c_));return m?+m[1]:0;};
  res.sort((x,y)=>tN(x.t)-tN(y.t)||String(x.t).localeCompare(String(y.t))||String(x.cz).localeCompare(String(y.cz))||String(x.car).localeCompare(String(y.car))||prN(x.cod)-prN(y.cod));
  const usado={};res.forEach(r=>r.acts.forEach(x=>{if(!x.omitido)usado[x.act]=(usado[x.act]||0)+x.q;}));
- ['usado','items','fa','aMicro'].forEach(k=>{res[k]=prog[k];});res.usado=usado;res.gasto=gasto;res.v234=true;res.n_pend=pend.length;res.pend_m2=pend.reduce((s,p)=>s+p.m2,0);VC_PROG=res;return res;};
+ ['usado','items','fa','aMicro'].forEach(k=>{res[k]=prog[k];});res.usado=usado;res.gasto=gasto;res.v234=true;res.n_pend=pend.length;res.pend_m2=pend.reduce((s,p)=>s+p.m2,0);VC_PROG=res;return res;});
 VC_FASE[0]='solo slurry: el microfresado y el sello ya están hechos';
 // «hecho» con nombres equivalentes (slurry seal ↔ slurry) en la lista y el mapa de la v231
 (function(){if(DATA!=='Campo')return;
@@ -2984,7 +2941,7 @@ function rolVista(){if(vcActiva())return '';const r=rolActual();if(r=='inspector
 function inicioPend(){const v=rolVista();if(!v)return 0;if(v=='cuadrilla')return otMias().length;const pv=miPaso()?porValidar().length:0;if(v=='inspector')return pv+bitPend().length;return pv+bitPend().length+otPorRevisar().length+otPorCerrar().length+acPend().length;}
 function inicioBoton(){let b=$('binicio');if(!b){const fila=document.querySelector('.gps .fila');if(!fila)return;fila.insertAdjacentHTML('afterbegin','<button id="binicio" onclick="inicioRol()" style="display:none;background:#004A61;color:#fff;border-color:#004A61;font-weight:bold"></button> ');b=$('binicio');}
  const v=rolVista();const n=inicioPend();b.style.display=v?'':'none';b.textContent=(v=='cuadrilla'?'🛠 Órdenes':'🏠 Inicio')+(n?' ('+n+')':'');}
-function inicioRol(){const v=rolVista();if(!v){masCerrar();return;}window.MA_EXTRA=null;const u=miUsuario()||{};const nom=localStorage.getItem('pms_usuario')||'';const z=miZona();
+function inicioRolBase(){const v=rolVista();if(!v){masCerrar();return;}window.MA_EXTRA=null;const u=miUsuario()||{};const nom=localStorage.getItem('pms_usuario')||'';const z=miZona();
  const card=(ico,t,sub,fn,n,col)=>`<div onclick="${fn}" style="position:relative;background:${col||'#fff'};color:${col?'#fff':'#222'};border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px"><div style="font-size:34px;line-height:1.1">${ico}</div><div style="font-size:14px;font-weight:bold;margin-top:4px">${t}</div><div style="font-size:11px;opacity:.8">${sub||''}</div>${n?`<span style="position:absolute;top:8px;right:8px;background:#d32f2f;color:#fff;border-radius:12px;min-width:24px;height:24px;line-height:24px;font-size:13px;font-weight:bold;padding:0 6px">${n}</span>`:''}</div>`;
  let cs=[];const pv=miPaso()?porValidar().length:0;
  if(v=='cuadrilla'){const n=otMias().length;cs=[card('🛠','Órdenes de trabajo',n?'arreglos por hacer':'no hay pendientes',"otLista('cuadrilla')",n,'#e65100'),card('📝','Registrar en el mapa','daño u obra en una sección','masCerrar()'),card('📋','Mis tareas','inspecciones programadas','verTareas()'),card('📓','Bitácora','escribir la del día','bitacoraAbrir()')];}
@@ -2997,6 +2954,14 @@ function inicioRol(){const v=rolVista();if(!v){masCerrar();return;}window.MA_EXT
  masPanel('🏠 Inicio',`<div style="background:#004A61;color:#fff;border-radius:12px;padding:12px 14px;margin:6px 0 10px"><div style="font-size:17px;font-weight:bold">${esc(nom)}</div><div style="font-size:12px;opacity:.9">${esc(u.cargo||rolTxt)}${z?' · zona '+esc(z):''}</div></div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:9px">${cs.join('')}</div>
   <div style="font-size:11px;color:#666;margin-top:10px">Datos del ${(VERSION&&VERSION.generado)||'—'}. Lo que usted registre se envía solo cuando haya señal; lo de los demás aparece cuando el PC publica.</div>`);inicioBoton();}
+// v320 (Erix, 18-nov-2026: integrar los parches uno por uno): inicioRol arma la pantalla de inicio de cada rol. Antes eran 10 capas, una encima
+// de otra. Ahora: la base (inicioRolBase, v242) y los pasos que cada versión agrega con inicioRolPaso(nombre, función, cuando).
+// Un paso con «cuando» REEMPLAZA la base y los pasos anteriores mientras esa condición se cumpla (v255: la cuadrilla tiene su propio inicio);
+// los pasos posteriores corren igual. Un paso que falla no tumba la pantalla. Para verlos: INICIO_ROL_PASOS.map(p=>p.nombre)
+function inicioRolPaso(nombre,fn,cuando){(window.INICIO_ROL_PASOS=window.INICIO_ROL_PASOS||[]).push({nombre,fn,cuando:cuando||null});}
+function inicioRol(){const P=window.INICIO_ROL_PASOS||[];let k=-1;for(let i=P.length-1;i>=0;i--){if(P[i].cuando&&P[i].cuando()){k=i;break;}}
+ const r=k<0?inicioRolBase():P[k].fn();
+ for(let i=k+1;i<P.length;i++){if(P[i].cuando)continue;try{P[i].fn();}catch(e){console.error('inicio · '+P[i].nombre,e);}}return r;}
 (function(){if(DATA!=='Campo')return;
  // la marca de agua puede recibir la ubicación del formulario abierto (reporte / orden)
  const _mc42=maContexto;maContexto=function(extra){const m=window.MA_EXTRA;if(!m)return _mc42(extra);const x=Object.assign({},extra||{});['cod','t','cz','car','p1','p2'].forEach(k=>{try{if(m[k])x[k]=m[k];}catch(e){}});const c=_mc42(x);if(String(c.p2).trim()==='')c.p2='';return c;};
@@ -3110,7 +3075,7 @@ async function refrescarLiviano(manual){if(DATA!=='Campo'||REFRESCO.ocupado||!na
  window.addEventListener('online',()=>setTimeout(()=>refrescarLiviano(false),3000));
  // después de enviar lo propio, se vuelve a mirar a los 6 minutos (lo que tarda la publicación rápida cuando coincide)
  // botón «Actualizar» en el inicio por rol
- const _ir44=inicioRol;inicioRol=function(){_ir44();try{const v=masCaja();const pie=[...v.querySelectorAll('div')].find(d=>/^Datos del /.test(d.textContent||'')&&d.children.length==0);if(pie&&!$('brefresco'))pie.insertAdjacentHTML('afterend','<button id="brefresco" type="button" onclick="refrescarLiviano(true).then(ok=>{if(ok)inicioRol();})" style="width:100%;margin-top:6px;border:1px solid #004A61;border-radius:8px;padding:10px;background:#fff;color:#004A61;font-size:14px">🔄 Buscar datos nuevos ahora</button><div style="font-size:11px;color:#666;margin-top:4px">El PC publica lo nuevo cada hora (6:30 a. m. a 7:30 p. m.); la app lo trae sola.</div>');}catch(e){}};
+ inicioRolPaso('v244 botón «Buscar datos nuevos ahora»',function(){try{const v=masCaja();const pie=[...v.querySelectorAll('div')].find(d=>/^Datos del /.test(d.textContent||'')&&d.children.length==0);if(pie&&!$('brefresco'))pie.insertAdjacentHTML('afterend','<button id="brefresco" type="button" onclick="refrescarLiviano(true).then(ok=>{if(ok)inicioRol();})" style="width:100%;margin-top:6px;border:1px solid #004A61;border-radius:8px;padding:10px;background:#fff;color:#004A61;font-size:14px">🔄 Buscar datos nuevos ahora</button><div style="font-size:11px;color:#666;margin-top:4px">El PC publica lo nuevo cada hora (6:30 a. m. a 7:30 p. m.); la app lo trae sola.</div>');}catch(e){}});
 })();
 
 // ================= v245 (Erix, 9-nov-2026, 17:34 y 18:53): microfresado = el del plan (IRI), sello por relación de campo (1 ml por m², se va
@@ -3143,9 +3108,9 @@ function vcNotaCantidades(){try{const c=vcContrato();if(!c||vcEsMezcla(c))return
    +(rel?`<br><b>Sello de fisuras: ${String(rel).replace('.',',')} ml por cada m²</b> de slurry o microfresado (relación de campo, se va validando con lo que se registre${R.observado!=null&&R.n?`; observada hasta hoy: ${String(R.observado).replace('.',',')} ml/m² en ${R.n} tramo(s)`:'; aún sin tramos suficientes para comprobarla'}).`:'')+`</div>`;}catch(e){return '';}}
 (function(){if(DATOS===undefined||DATA!=='Campo')return;
  // (1) el sello de fisuras de los tramos con slurry o microfresado se estima con la relación de campo (ml por m²); el del plan queda como estaba para los demás
- const _vcProg11=vcPrograma;vcPrograma=function(){const rel=relSello();const c=vcContrato();if(!rel||!c||vcEsMezcla(c))return _vcProg11();if(VC_PROG&&VC_PROG._rel===rel&&VC_PROG._ctr===c.contrato)return _vcProg11();
-  const orig=[];try{Object.keys(DATOS).forEach(e=>Object.keys(DATOS[e]).forEach(a=>(DATOS[e][a]||[]).forEach(f=>{const m2=(+f[24]||0)||(+f[25]||0);if(m2>0){orig.push([f,f[22]]);f[22]=Math.round(m2*rel*10)/10;}})));VC_PROG=null;VC_PROG_K='';const p=_vcProg11();if(p){p._rel=rel;p._ctr=c.contrato;}return p;}
-  finally{orig.forEach(o=>{o[0][22]=o[1];});}};
+ vcProgramaCapa('v245 sello de fisuras según la relación real',function(sig){const rel=relSello();const c=vcContrato();if(!rel||!c||vcEsMezcla(c))return sig();if(VC_PROG&&VC_PROG._rel===rel&&VC_PROG._ctr===c.contrato)return sig();
+  const orig=[];try{Object.keys(DATOS).forEach(e=>Object.keys(DATOS[e]).forEach(a=>(DATOS[e][a]||[]).forEach(f=>{const m2=(+f[24]||0)||(+f[25]||0);if(m2>0){orig.push([f,f[22]]);f[22]=Math.round(m2*rel*10)/10;}})));VC_PROG=null;VC_PROG_K='';const p=sig();if(p){p._rel=rel;p._ctr=c.contrato;}return p;}
+  finally{orig.forEach(o=>{o[0][22]=o[1];});}});
  // el saldo de microfresado para acordar actividades se mide contra el plan, no contra todo lo que permite el contrato
  const _as45=acSaldo;acSaldo=function(ctr,comp){const s=_as45(ctr,comp);try{if(s&&comp=='micro'){const pm=planMicroTotal().m2;if(pm>0&&pm<s.q){s.q=pm;s.saldo=pm-s.reg-s.ac;}}}catch(e){}return s;};
  // (2)(3) en «Tramos a intervenir»: nota de cantidades y tramos cercanos si sobra presupuesto
@@ -3157,9 +3122,9 @@ function vcNotaCantidades(){try{const c=vcContrato();if(!c||vcEsMezcla(c))return
  const _rs45=regSistema;regSistema=function(tipo,extra){if(window.VER_COMO&&['orden','acuerdo','bitacora_rev','validacion'].includes(tipo)){avisoCorto('👁 Vista de demostración: no se guarda. Vuelva a «mi vista» para actuar.');return;}return _rs45(tipo,extra);};
  const _rg45=repGuardar;repGuardar=function(){if(window.VER_COMO){alert('Vista de demostración: el reporte no se guarda. Vuelva a «mi vista» para reportar de verdad.');return;}return _rg45();};
  window.verComo=function(rol,zona){window.VER_COMO=rol?{rol:rol,zona:zona||''}:null;try{locSet('pms_ord_loc',locGet('pms_ord_loc'));}catch(e){}inicioBoton();inicioRol();};
- const _ir45=inicioRol;inicioRol=function(){_ir45();try{if(_ra45()!='administrador')return;const v=masCaja();const caja=[...v.querySelectorAll('div')].find(d=>d.style&&d.style.background&&/rgb\(0, 74, 97\)|#004A61/i.test(d.style.background)&&d.children.length>=2);if(!caja||$('vercomo'))return;const V=window.VER_COMO;const b=(t,fn,on)=>`<button type="button" onclick="${fn}" style="border:1px solid ${on?'#C0C233':'#90a4ae'};background:${on?'#C0C233':'#fff'};color:#222;border-radius:14px;padding:6px 10px;font-size:12px;margin:3px 3px 0 0;font-weight:${on?'bold':'normal'}">${t}</button>`;
+ inicioRolPaso('v245 «ver como» del administrador',function(){try{if(_ra45()!='administrador')return;const v=masCaja();const caja=[...v.querySelectorAll('div')].find(d=>d.style&&d.style.background&&/rgb\(0, 74, 97\)|#004A61/i.test(d.style.background)&&d.children.length>=2);if(!caja||$('vercomo'))return;const V=window.VER_COMO;const b=(t,fn,on)=>`<button type="button" onclick="${fn}" style="border:1px solid ${on?'#C0C233':'#90a4ae'};background:${on?'#C0C233':'#fff'};color:#222;border-radius:14px;padding:6px 10px;font-size:12px;margin:3px 3px 0 0;font-weight:${on?'bold':'normal'}">${t}</button>`;
    caja.insertAdjacentHTML('afterend',`<div id="vercomo" style="background:#fff;border-radius:10px;padding:8px 10px;margin:0 0 10px;${V?'border:2px solid #C0C233':''}"><div style="font-size:12px;color:#555">👁 <b>Ver la app como la ve…</b> ${V?'<span style="color:#b26a00">(demostración: no guarda nada)</span>':''}</div>
-    ${b('Mi vista (administrador)',"verComo('')",!V)}${b('Inspector',"verComo('inspector')",V&&V.rol=='inspector')}${b('Coord. junior Boyacá',"verComo('coordinador_junior','Boyacá')",V&&V.rol=='coordinador_junior'&&V.zona=='Boyacá')}${b('Coord. junior Cundinamarca',"verComo('coordinador_junior','Cundinamarca')",V&&V.rol=='coordinador_junior'&&V.zona=='Cundinamarca')}${b('Cuadrilla Boyacá',"verComo('campo','Boyacá')",V&&V.rol=='campo'&&V.zona=='Boyacá')}${b('Cuadrilla Cundinamarca',"verComo('campo','Cundinamarca')",V&&V.rol=='campo'&&V.zona=='Cundinamarca')}${b('Contratista…',"vcEntrar()",false)}</div>`);}catch(e){console.error(e);}};
+    ${b('Mi vista (administrador)',"verComo('')",!V)}${b('Inspector',"verComo('inspector')",V&&V.rol=='inspector')}${b('Coord. junior Boyacá',"verComo('coordinador_junior','Boyacá')",V&&V.rol=='coordinador_junior'&&V.zona=='Boyacá')}${b('Coord. junior Cundinamarca',"verComo('coordinador_junior','Cundinamarca')",V&&V.rol=='coordinador_junior'&&V.zona=='Cundinamarca')}${b('Cuadrilla Boyacá',"verComo('campo','Boyacá')",V&&V.rol=='campo'&&V.zona=='Boyacá')}${b('Cuadrilla Cundinamarca',"verComo('campo','Cundinamarca')",V&&V.rol=='campo'&&V.zona=='Cundinamarca')}${b('Contratista…',"vcEntrar()",false)}</div>`);}catch(e){console.error(e);}});
 })();
 
 // ================= v246 (Erix, 9-nov-2026, 21:20): fotos del contratista sin el marco de la IA · marca de agua derecha en fotos horizontales ·
@@ -3227,7 +3192,7 @@ function camGiro(){try{const o=CAM.up;if(!o)return 0;const a=(screen.orientation
 (function(){if(DATA!=='Campo')return;
  try{if(typeof LIVIANAS!=='undefined'&&!LIVIANAS.includes('contratos'))LIVIANAS.push('contratos');}catch(e){}      // los contratos (fechas, valor) también llegan con la publicación rápida de cada hora
  // el programa se rehace cuando cambian las fechas o el valor del contrato
- const _vp47=vcPrograma;vcPrograma=function(){const c=vcContrato();const k=c?[c.contrato,vcActa(c),vcFin(c),c.valor,c.plazo_meses,vcNFichas()].join('|'):'';if(VC_PROG&&VC_PROG._k47!==undefined&&VC_PROG._k47!==k){VC_PROG=null;VC_PROG_K='';}const p=_vp47();try{if(p)p._k47=k;}catch(e){}return p;};
+ vcProgramaCapa('v247 recalcular si cambió el contrato o el acta',function(sig){const c=vcContrato();const k=c?[c.contrato,vcActa(c),vcFin(c),c.valor,c.plazo_meses,vcNFichas()].join('|'):'';if(VC_PROG&&VC_PROG._k47!==undefined&&VC_PROG._k47!==k){VC_PROG=null;VC_PROG_K='';}const p=sig();try{if(p)p._k47=k;}catch(e){}return p;});
  // nota de fechas en «Tramos a intervenir» y en la programación
  window.vcNotaFechas=function(){try{const c=vcContrato();if(!c)return '';const a=vcActa(c),f=vcFin(c);const fm=d=>new Date(d+'T12:00:00').toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'});
    if(!a)return `<div style="background:#fff;border-radius:8px;padding:6px 10px;margin:4px 0;font-size:12px;color:#555">📅 <b>Acta de inicio: pendiente de firma.</b> Las semanas van numeradas (semana 1, 2…). Cuando BTS cargue la fecha del acta, la app pone las fechas reales, el día final (plazo de ${String(c.plazo_meses||'').replace('.',',')} meses) y rehace las cuentas sola. Contrato nuevo: todo su valor se programa en obra por hacer.</div>`;
@@ -3237,12 +3202,12 @@ function camGiro(){try{const o=CAM.up;if(!o)return 0;const a=(screen.orientation
 // ================= v249 (Erix, 9-nov-2026, 22:23): contrato de Lápiz: el sello de fisuras SIEMPRE antes del slurry (nunca «lo hace BTS» por ahora) · solo se muestra lo que falta por hacer
 (function(){if(DATA!=='Campo')return;
  const ORD={sello:1,slurry:2,micro:0};const ordAct=(a,b)=>(ORD[vcFam(a.act)]??5)-(ORD[vcFam(b.act)]??5);
- const _vp49=vcPrograma;vcPrograma=function(){const c=vcContrato();const prog=_vp49();if(!c||!prog||prog.mezcla||prog._v49)return prog;
+ vcProgramaCapa('v249 solo lo que falta por hacer',function(sig){const c=vcContrato();const prog=sig();if(!c||!prog||prog.mezcla||prog._v49)return prog;
   const res=[];let gasto=0;const usado={};
   prog.forEach(r=>{      // v250 (Erix 22:52): los tramos de «solo slurry» (microfresado y sello ya hechos) SÍ entran: es obra que debe hacer el contratista
    const acts=(r.acts||[]).filter(x=>!x.hecho&&!x.omitido).sort(ordAct);if(!acts.length)return;      // lo ya hecho no se muestra: solo lo que falta
    const t=Object.assign({},r,{acts:acts,costo:acts.reduce((s,x)=>s+(+x.costo||0),0),hecho:false});gasto+=t.costo;acts.forEach(x=>{usado[x.act]=(usado[x.act]||0)+x.q;});res.push(t);});
-  ['items','fa','aMicro','_k47','_rel','_ctr','v234'].forEach(k=>{res[k]=prog[k];});res.usado=usado;res.gasto=gasto;res.n_pend=res.filter(r=>r.slurry_pend).length;res.pend_m2=res.filter(r=>r.slurry_pend).reduce((t,r)=>t+(+r.acts[0].q||0),0);res._v49=true;VC_PROG=res;return res;};
+  ['items','fa','aMicro','_k47','_rel','_ctr','v234'].forEach(k=>{res[k]=prog[k];});res.usado=usado;res.gasto=gasto;res.n_pend=res.filter(r=>r.slurry_pend).length;res.pend_m2=res.filter(r=>r.slurry_pend).reduce((t,r)=>t+(+r.acts[0].q||0),0);res._v49=true;VC_PROG=res;return res;});
  // «Cantidades que resultan» en el orden de ejecución: microfresado, sello, slurry
  const _vl49=vcListado;vcListado=function(){_vl49();try{const v=masCaja();if(!v)return;const caja=[...v.querySelectorAll('div')].find(d=>/^Cantidades que resultan/.test(d.innerText||''));if(!caja)return;
    const b=caja.querySelector('b');const lineas=caja.innerHTML.split('<br>');const cab=lineas.shift();const peso=t=>/microfres/i.test(t)?0:/sello/i.test(t)?1:/slurry/i.test(t)?2:5;lineas.sort((x,y)=>peso(x)-peso(y));caja.innerHTML=[cab].concat(lineas).join('<br>');}catch(e){}};
@@ -3290,8 +3255,8 @@ function rsZonaVer(){try{const z=miZona();if(!z||!window.map||!Object.keys(COORD
  try{const e=$('esc');if(e){const sp=document.createElement('span');sp.id='rsesc';const prev=e.previousSibling;e.parentNode.insertBefore(sp,e);if(prev&&prev.nodeType==3&&/Escenario/.test(prev.textContent)){prev.textContent=prev.textContent.replace('Escenario','');sp.appendChild(document.createTextNode('Escenario '));}sp.appendChild(e);}}catch(e){}
  const css=document.createElement('style');css.textContent='body.rs #rsesc,body.rs #det{display:none!important}';document.head.appendChild(css);
  // (1) tarjeta «Dónde estoy» de primera en el Inicio
- const _ir53=inicioRol;inicioRol=function(){const r=_ir53.apply(this,arguments);try{if(!rsOn())return r;const v=masCaja();if(!v||v.querySelector('#rsdonde'))return r;const g=[...v.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g)return r;
-   g.insertAdjacentHTML('afterbegin',`<div id="rsdonde" onclick="rsDondeEstoy()" style="grid-column:1/-1;display:flex;align-items:center;gap:12px;background:#1565c0;color:#fff;border-radius:14px;padding:12px 14px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.15)"><span style="font-size:34px">📍</span><div style="text-align:left"><div style="font-size:15px;font-weight:bold">Dónde estoy</div><div style="font-size:11px;opacity:.9">abre la ficha del sector donde está parado</div></div></div>`);}catch(e){console.error(e);}return r;};
+ inicioRolPaso('v253 «dónde estoy» (inspector y coordinador junior)',function(){try{if(!rsOn())return;const v=masCaja();if(!v||v.querySelector('#rsdonde'))return;const g=[...v.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g)return;
+   g.insertAdjacentHTML('afterbegin',`<div id="rsdonde" onclick="rsDondeEstoy()" style="grid-column:1/-1;display:flex;align-items:center;gap:12px;background:#1565c0;color:#fff;border-radius:14px;padding:12px 14px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.15)"><span style="font-size:34px">📍</span><div style="text-align:left"><div style="font-size:15px;font-weight:bold">Dónde estoy</div><div style="font-size:11px;opacity:.9">abre la ficha del sector donde está parado</div></div></div>`);}catch(e){console.error(e);}});
  // (5) botón en la ficha
  const _fi53=fichaInterna;fichaInterna=function(cod){const r=_fi53.apply(this,arguments);try{if(!rsOn())return r;const b=$('ficha');if(!b||b.querySelector('#rsrep'))return r;const btn=`<button id="rsrep" type="button" onclick="rsReportarAqui('${String(cod).replace(/'/g,"\\'")}')" style="display:block;width:100%;margin:8px 0;border:0;border-radius:8px;padding:12px;background:#e65100;color:#fff;font-weight:bold;font-size:15px">🚧 Reportar daño aquí</button>`;
    const h=b.querySelector('h3,h2,b');if(h&&h.parentNode===b)h.insertAdjacentHTML('afterend',btn);else b.insertAdjacentHTML('afterbegin',btn);}catch(e){console.error(e);}return r;};
@@ -3342,7 +3307,7 @@ function cuActs(){const s=$('cuact');if(!s)return;const k=(REP&&REP.g)||'pav';s.
  // sin fichas para la cuadrilla
  const _f55=ficha;ficha=function(){if(cuOn())return;return _f55.apply(this,arguments);};
  // su Inicio propio
- const _ir55=inicioRol;inicioRol=function(){if(cuOn())return cuInicio();return _ir55.apply(this,arguments);};
+ inicioRolPaso('v255 la cuadrilla tiene su propio inicio, muy simple',function(){return cuInicio();},()=>cuOn());
  // al guardar «Hice un arreglo»: el registro lleva hecho + actividad + cantidad
  const _sr55=setRegistros;setRegistros=function(r){try{if(CU_ARR&&r&&r.length){const x=r[r.length-1];if(x&&x.tipo=='nota'&&x.elemento&&x.elemento.reporte&&!x.elemento.hecho){const a=$('cuact')?$('cuact').value:'';const obs=$('repobs')?$('repobs').value.trim():'';const c=$('cucant')?$('cucant').value:'';
     x.elemento=Object.assign({},x.elemento,{orden:1,hecho:1,actividad:/^Otra/.test(a)?obs:a,cantidad:c===''?'':+c,unidad:c===''?'':($('cuun')?$('cuun').value:''),cuadrilla:x.usuario});x.observacion=String(x.observacion||'').replace('[Reporte de inspección','[Arreglo hecho por la cuadrilla').replace(/ \(gravedad [a-z]+\)$/,'');}}}catch(e){console.error(e);}return _sr55.apply(this,arguments);};
@@ -3415,7 +3380,7 @@ function avActivar(){if(!('Notification' in window)){alert('Este celular no perm
    const P=conLocal(AV.L.filter(a=>!org.has(a.id)&&!ids.has(a.id)).map(avOrden),'pms_ord_loc');return P.concat(L);}catch(e){return L;}};
  // botón para activar las notificaciones (cuadrilla y coordinador)
  const _ci57=cuInicio;cuInicio=function(){const r=_ci57.apply(this,arguments);try{avBoton();}catch(e){}return r;};
- const _ir57=inicioRol;inicioRol=function(){const r=_ir57.apply(this,arguments);try{if(!cuOn()&&avQuien())avBoton();}catch(e){}return r;};
+ inicioRolPaso('v257 avisos como órdenes',function(){try{if(!cuOn()&&avQuien())avBoton();}catch(e){}});
  window.avBoton=function(){const v=masCaja();if(!v||v.querySelector('#avbtn'))return;const ok='Notification' in window&&Notification.permission==='granted';const h=v.firstElementChild&&v.firstElementChild.children[1];
    const html=ok?`<div id="avbtn" style="font-size:12px;color:#2e7d32;margin:6px 0">🔔 Avisos activos: cuando llegue un reporte nuevo el celular suena y vibra.</div>`:`<div id="avbtn" onclick="avActivar()" style="display:flex;align-items:center;gap:10px;background:#fff8e1;border:2px solid #f9a825;border-radius:12px;padding:10px 12px;margin:8px 0;cursor:pointer"><span style="font-size:28px">🔔</span><div><b style="font-size:15px">Activar avisos en este celular</b><div style="font-size:12px;color:#555">para que le suene cuando llegue un reporte nuevo</div></div></div>`;
    if(h)h.insertAdjacentHTML('afterend',html);else v.insertAdjacentHTML('afterbegin',html);};
@@ -3511,11 +3476,11 @@ function infraGuardar(){const sel=$('infsitio');const sitio=sel?sel.value:'';if(
     `<button type="button" onclick="${modo=='contratista'?'masCerrar()':'inicioRol()'}" style="width:100%;margin-top:8px;border:0;border-radius:8px;padding:11px;background:#eceff1;font-size:14px">${modo=='contratista'?'◀ Volver':'🏠 Volver al inicio'}</button>`);};
  const _ohg59=otHechaGuardar;otHechaGuardar=function(){const r=_ohg59.apply(this,arguments);try{if(vcActiva()&&otDelContratista)setTimeout(()=>otLista('contratista'),50);}catch(e){}return r;};
  // Inicio del inspector y del coordinador: «Arreglos por revisar» y «Infraestructura»
- const _ir59=inicioRol;inicioRol=function(){const r=_ir59.apply(this,arguments);try{if(cuOn())return r;const v=rolVista();if(v!='inspector'&&v!='coord')return r;const box=masCaja();const g=box&&[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g||g.querySelector('.c59'))return r;
+ inicioRolPaso('v259 tarjetas del inspector y del coordinador',function(){try{if(cuOn())return;const v=rolVista();if(v!='inspector'&&v!='coord')return;const box=masCaja();const g=box&&[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g||g.querySelector('.c59'))return;
    const card=(ico,t,sub,fn,n,col)=>`<div class="c59" onclick="${fn}" style="position:relative;background:${col||'#fff'};color:${col?'#fff':'#222'};border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px"><div style="font-size:34px;line-height:1.1">${ico}</div><div style="font-size:14px;font-weight:bold;margin-top:4px">${t}</div><div style="font-size:11px;opacity:.8">${sub||''}</div>${n?`<span style="position:absolute;top:8px;right:8px;background:#d32f2f;color:#fff;border-radius:12px;min-width:24px;height:24px;line-height:24px;font-size:13px;font-weight:bold;padding:0 6px">${n}</span>`:''}</div>`;
    let h='';if(v=='inspector'){const n=otPorVerificar().length;h+=card('🔍','Arreglos por revisar','hechos por la cuadrilla',"otLista('verificar')",n,n?'#2e7d32':'');}
    h+=card('🏢','Infraestructura','áreas de servicio, peajes y básculas','infraAbrir()',0,'#5d4037');
-   const ref=g.children[v=='inspector'?2:1];if(ref)ref.insertAdjacentHTML('afterend',h);else g.insertAdjacentHTML('beforeend',h);}catch(e){console.error(e);}return r;};
+   const ref=g.children[v=='inspector'?2:1];if(ref)ref.insertAdjacentHTML('afterend',h);else g.insertAdjacentHTML('beforeend',h);}catch(e){console.error(e);}});
  // contratista: sus órdenes de BTS en «Más»
  const _mp59=masPanel;masPanel=function(titulo,cuerpo){try{if(/Más · contratista/.test(titulo)){const n=otDelContratista().length;cuerpo=`<div onclick="otLista('contratista')" style="display:flex;align-items:center;gap:10px;background:${n?'#fff3e0':'#fff'};border:${n?'2px solid #ef6c00':'0'};border-radius:10px;padding:10px;margin:6px 0;cursor:pointer"><span style="font-size:26px">🛠</span><div style="flex:1"><b style="font-size:14px">Órdenes de BTS</b><div style="font-size:11px;color:#666">arreglos que BTS le asignó${n?'':' · no tiene pendientes'}</div></div>${n?`<span style="background:#d32f2f;color:#fff;border-radius:12px;padding:2px 9px;font-weight:bold">${n}</span>`:'<span style="color:#999">›</span>'}</div>`+String(cuerpo||'');}}catch(e){}return _mp59(titulo,cuerpo);};
  // avisos al instante: arreglos hechos → inspector y coordinador; reportes para un contratista → no le suenan a la cuadrilla
@@ -3591,9 +3556,9 @@ function rgAprobar(){const c=vcContrato();if(!c||!vcEsAdmin())return;if(!confirm
  regSistema('regla_contrato',{contrato:c.contrato,evento:'aprobar'});RG_APROBADA[c.contrato]=1;try{localStorage.setItem('pms_reglas_aprob',JSON.stringify(RG_APROBADA));localStorage.setItem('pms_borrador_off','0');}catch(e){}try{sincronizar();}catch(e){}
  VC_PROG=null;VC_PROG_K='';avisoCorto('✔ Aprobado: el contratista lo verá cuando el PC publique (máximo en una hora).');vcReglasPanel();}
 (function(){if(DATA!=='Campo')return;
- const _vp60=vcPrograma;vcPrograma=function(){const base=_vp60.apply(this,arguments);try{const c=vcContrato();if(!c||!base||base.mezcla)return base;const R=vcReglaActiva(c);if(!R)return base;
+ vcProgramaCapa('v260 reglas del contrato',function(sig){const base=sig();try{const c=vcContrato();if(!c||!base||base.mezcla)return base;const R=vcReglaActiva(c);if(!R)return base;
    const k=[c.contrato,JSON.stringify(R),(VERSION&&VERSION.generado)||'',Object.keys(FICHA).length,relSello()].join('|');if(RG_CACHE.k===k&&RG_CACHE.p)return RG_CACHE.p;
-   const p=vcProgReglas(c,R,base);RG_CACHE={k:k,p:p};return p;}catch(e){console.error('reglas',e);return base;}};
+   const p=vcProgReglas(c,R,base);RG_CACHE={k:k,p:p};return p;}catch(e){console.error('reglas',e);return base;}});
  // aviso en la banda de arriba y acceso a las reglas
  vcAplicarPaso('v260 reglas del contrato en la banda',function(){try{const b=$('vcbanda');const c=vcContrato();const R=vcReglas(c);if(b&&vcActiva()&&R&&!b.querySelector('#rgband')){const vig=R.estado=='vigente'||RG_APROBADA[c.contrato];
     if(vcEsAdmin()||vig)b.insertAdjacentHTML('beforeend',` &nbsp; <span id="rgband" onclick="vcReglasPanel()" style="cursor:pointer;background:${vig?'#2e7d32':'#f9a825'};color:${vig?'#fff':'#000'};border-radius:10px;padding:1px 8px;font-weight:bold">${vig?'📐 reglas':(localStorage.getItem('pms_borrador_off')=='1'?'👁 programa actual':'🧪 BORRADOR')}</span>`);}}catch(e){}});
@@ -3689,8 +3654,8 @@ function rvgFirmar(id,ev){const x=((((VERSION&&VERSION.relaciones)||{}).revision
  regSistema('revision_gestor',{evento:ev,id_revision:id,codigo:x.cod,observacion:obs});const L=rvgLocal();L[id]=ev;try{localStorage.setItem('pms_rvg',JSON.stringify(L));}catch(e){}try{sincronizar();}catch(e){}
  avisoCorto(ev=='aprobar'?'✔ Aprobado: entra al plan cuando el PC lo reciba (máximo en una hora).':'✔ Rechazado: el plan sigue como estaba.');rvgLista();}
 (function(){if(DATA!=='Campo')return;
- const _ir62=inicioRol;inicioRol=function(){const r=_ir62.apply(this,arguments);try{if(!rvgFirmo()||vcActiva())return r;const box=masCaja();const g=box&&[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g||g.querySelector('.c62'))return r;
-   const n=rvgPend().length;g.insertAdjacentHTML('afterbegin',`<div class="c62" onclick="rvgLista()" style="position:relative;background:${n?'#6a1b9a':'#fff'};color:${n?'#fff':'#222'};border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px"><div style="font-size:34px;line-height:1.1">✍</div><div style="font-size:14px;font-weight:bold;margin-top:4px">Cambios al plan</div><div style="font-size:11px;opacity:.85">${n?'esperan su aprobación':'nada pendiente'}</div>${n?`<span style="position:absolute;top:8px;right:8px;background:#d32f2f;color:#fff;border-radius:12px;min-width:24px;height:24px;line-height:24px;font-size:13px;font-weight:bold;padding:0 6px">${n}</span>`:''}</div>`);}catch(e){console.error(e);}return r;};
+ inicioRolPaso('v262 revisiones por firmar',function(){try{if(!rvgFirmo()||vcActiva())return;const box=masCaja();const g=box&&[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g||g.querySelector('.c62'))return;
+   const n=rvgPend().length;g.insertAdjacentHTML('afterbegin',`<div class="c62" onclick="rvgLista()" style="position:relative;background:${n?'#6a1b9a':'#fff'};color:${n?'#fff':'#222'};border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px"><div style="font-size:34px;line-height:1.1">✍</div><div style="font-size:14px;font-weight:bold;margin-top:4px">Cambios al plan</div><div style="font-size:11px;opacity:.85">${n?'esperan su aprobación':'nada pendiente'}</div>${n?`<span style="position:absolute;top:8px;right:8px;background:#d32f2f;color:#fff;border-radius:12px;min-width:24px;height:24px;line-height:24px;font-size:13px;font-weight:bold;padding:0 6px">${n}</span>`:''}</div>`);}catch(e){console.error(e);}});
 })();
 
 // ================= v264 (Erix, 11-nov-2026, 17:19): EL MANTENIMIENTO RUTINARIO EN LA FICHA DE CADA SECCIÓN
@@ -3761,7 +3726,8 @@ function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){a
    // inicio de la cuadrilla (botones grandes en lista): una fila igual después de «Reportar un daño»
    const fil=[...box.querySelectorAll('[onclick]')].filter(e=>/cuReportar|cuArreglo|otLista/.test(e.getAttribute('onclick')||''));const ult=fil[fil.length-1];
    if(ult)ult.insertAdjacentHTML('afterend',`<div class="c276mj" onclick="mjAbrir()" style="position:relative;display:flex;align-items:center;gap:14px;background:#fff8e1;color:#222;border:1px solid #f9a825;border-radius:16px;padding:14px 16px;margin:10px 0;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.15)"><span style="font-size:36px">💡</span><div style="text-align:left;flex:1"><div style="font-size:17px;font-weight:bold">Proponer mejora</div><div style="font-size:13px;opacity:.9">una idea, o algo que no funciona</div></div></div>`);}catch(e){}}
- ['inicioRol','cuInicio'].forEach(n=>{const f=window[n];if(typeof f!='function')return;window[n]=function(){const r=f.apply(this,arguments);ponerMj();return r;};});
+ inicioRolPaso('v276 tarjeta «Proponer una mejora»',ponerMj);      // v320: antes envolvía inicioRol por nombre (window[n]); ahora es un paso
+ ['cuInicio'].forEach(n=>{const f=window[n];if(typeof f!='function')return;window[n]=function(){const r=f.apply(this,arguments);ponerMj();return r;};});
  window.v276Mj=ponerMj;
  // ---- 2) Mis registros
  function usuariosDelContrato(){try{if(!vcActiva())return null;const c=vcContrato();if(!c)return new Set();return new Set(usuariosDet().filter(u=>String(u.rol||'').toLowerCase()=='contratista'&&String(u.contrato||u.Contrato||'')==c.contrato).map(u=>u.nombre));}catch(e){return null;}}
@@ -3845,8 +3811,8 @@ function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){a
    (L.length?L.map(tj).join(''):'<div style="padding:22px;color:#2e7d32;text-align:center;font-size:15px">✔ No hay asignaciones por validar.</div>')+
    `<button type="button" onclick="inicioRol()" style="width:100%;margin-top:8px;border:0;border-radius:8px;padding:11px;background:#eceff1;font-size:14px">🏠 Volver al inicio</button>`);};
  // tarjeta en el inicio del coordinador (junior, gestor, administrador)
- const _ir291=inicioRol;inicioRol=window.inicioRol=function(){const r=_ir291.apply(this,arguments);try{if(cuOn()||rolVista()!='coord')return r;const n=otSugeridas().length;if(!n)return r;const box=masCaja();const g=box&&[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g||g.querySelector('.c291'))return r;
-   g.insertAdjacentHTML('afterbegin',`<div class="c291" onclick="sugLista()" style="position:relative;background:#f9a825;color:#222;border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px"><div style="font-size:34px;line-height:1.1">🤝</div><div style="font-size:14px;font-weight:bold;margin-top:4px">Asignar a contratista</div><div style="font-size:11px;opacity:.85">sugerencias por validar</div><span style="position:absolute;top:8px;right:8px;background:#d32f2f;color:#fff;border-radius:12px;min-width:24px;height:24px;line-height:24px;font-size:13px;font-weight:bold;padding:0 6px">${n}</span></div>`);}catch(e){console.error(e);}return r;};
+ inicioRolPaso('v291 órdenes sugeridas al coordinador',function(){try{if(cuOn()||rolVista()!='coord')return;const n=otSugeridas().length;if(!n)return;const box=masCaja();const g=box&&[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g||g.querySelector('.c291'))return;
+   g.insertAdjacentHTML('afterbegin',`<div class="c291" onclick="sugLista()" style="position:relative;background:#f9a825;color:#222;border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px"><div style="font-size:34px;line-height:1.1">🤝</div><div style="font-size:14px;font-weight:bold;margin-top:4px">Asignar a contratista</div><div style="font-size:11px;opacity:.85">sugerencias por validar</div><span style="position:absolute;top:8px;right:8px;background:#d32f2f;color:#fff;border-radius:12px;min-width:24px;height:24px;line-height:24px;font-size:13px;font-weight:bold;padding:0 6px">${n}</span></div>`);}catch(e){console.error(e);}});
 })();
 
 
@@ -4081,8 +4047,8 @@ function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){a
    if(!instalada())h+=item('📲','Instalar la app en este celular','queda como aplicación y funciona sin señal','instalarApp()','m316');
    const ref=[...P.children].find(x=>x.id=='mjfila'||/acCerrarSesion|vcSalir/.test(x.getAttribute('onclick')||''));if(ref)ref.insertAdjacentHTML('beforebegin',h);else P.insertAdjacentHTML('beforeend',h);
    try{ordenarMas();}catch(e){}}catch(e){console.error(e);}});
- const _ir=inicioRol;inicioRol=window.inicioRol=function(){const r0=_ir.apply(this,arguments);try{const r=rol();if(!['inspector','coordinador_junior','gestor','administrador'].includes(r))return r0;const box=masCaja();const g=box&&[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g||g.querySelector('.c316'))return r0;
-   const n=rfPorHacer();g.insertAdjacentHTML('beforeend',`<div class="c316" onclick="rfLista()" style="position:relative;background:#7b1fa2;color:#fff;border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px"><div style="font-size:34px;line-height:1.1">🔦</div><div style="font-size:14px;font-weight:bold;margin-top:4px">Reflectividad</div><div style="font-size:11px;opacity:.85">${r=='inspector'?'medir y mandar al contratista':'del inspector y el contratista'}</div>${n?`<span style="position:absolute;top:8px;right:8px;background:#d32f2f;color:#fff;border-radius:12px;min-width:24px;height:24px;line-height:24px;font-size:13px;font-weight:bold;padding:0 6px">${n}</span>`:''}</div>`);}catch(e){console.error(e);}return r0;};
+ inicioRolPaso('v316 reflectividad',function(){try{const r=rol();if(!['inspector','coordinador_junior','gestor','administrador'].includes(r))return;const box=masCaja();const g=box&&[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g||g.querySelector('.c316'))return;
+   const n=rfPorHacer();g.insertAdjacentHTML('beforeend',`<div class="c316" onclick="rfLista()" style="position:relative;background:#7b1fa2;color:#fff;border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px"><div style="font-size:34px;line-height:1.1">🔦</div><div style="font-size:14px;font-weight:bold;margin-top:4px">Reflectividad</div><div style="font-size:11px;opacity:.85">${r=='inspector'?'medir y mandar al contratista':'del inspector y el contratista'}</div>${n?`<span style="position:absolute;top:8px;right:8px;background:#d32f2f;color:#fff;border-radius:12px;min-width:24px;height:24px;line-height:24px;font-size:13px;font-weight:bold;padding:0 6px">${n}</span>`:''}</div>`);}catch(e){console.error(e);}});
 })();
 
 
@@ -4211,7 +4177,7 @@ function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){a
  // ------------------------------------------------------------------------------------------------ (2) programación por contrato desde la lista de BTS
  function progDe(ctr){try{return (((VERSION&&VERSION.programa_contratos)||{})[ctr])||null;}catch(e){return null;}}
  window.progDe=progDe;
- const _vp=vcPrograma;vcPrograma=window.vcPrograma=function(){const c=vcContrato();const P=c&&progDe(c.contrato);if(!P||!P.length)return _vp.apply(this,arguments);
+ vcProgramaCapa('v317 programación de obra de la lista de BTS',function(sig){const c=vcContrato();const P=c&&progDe(c.contrato);if(!P||!P.length)return sig();
   const key='v317|'+c.contrato+'|'+P.length+'|'+(c.items||[]).length+'|'+registros().length;if(VC_PROG&&VC_PROG_K==key)return VC_PROG;
   const aiu=c.aiu||{};const fa=1+((+aiu.A_pct||0)+(+aiu.I_pct||0)+(+aiu.U_pct||0))/100+((+aiu.U_pct||0)/100)*((+aiu.IVA_sobre_U_pct||0)/100);
   const valor=+c.valor||0;const nsem=Math.max(1,Math.round((+c.plazo_meses||4)*4.33));
@@ -4231,7 +4197,7 @@ function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){a
    r.acts.forEach(x=>{const f=FICHA[r.cod]||{};const h=r.cod&&(f.hist||[]).some(z=>String(z[1]).toLowerCase()==x.act.toLowerCase());const p=r.cod&&registros().some(z=>z.codigo==r.cod&&z.tipo=='obra'&&String(z.actividad||'').toLowerCase()==x.act.toLowerCase());x.hecho=!!(h||p);});
    const mzA=r.acts.filter(x=>mzs.some(i=>i.actividad==x.act));r.hecho=mzA.length?mzA.some(x=>x.hecho):r.acts.every(x=>x.hecho);});
   const its={};items.forEach(i=>{its[i.actividad]={pu:i.pu,cap:i.cap,un:i.un};});
-  prog.usado=usado;prog.items=its;prog.gasto=gasto;prog.fijo=fijo;prog.fa=fa;prog.mezcla=true;prog.volU=volU;prog.esp=0.14;prog.lista=true;VC_PROG=prog;VC_PROG_K=key;return prog;};
+  prog.usado=usado;prog.items=its;prog.gasto=gasto;prog.fijo=fijo;prog.fa=fa;prog.mezcla=true;prog.volU=volU;prog.esp=0.14;prog.lista=true;VC_PROG=prog;VC_PROG_K=key;return prog;});
  // la lista de parcheo dice de dónde sale cuando es el programa de BTS (no el plan del PMS)
  const _mp=masPanel;masPanel=window.masPanel=function(t,cuerpo){try{if(/Sitios de parcheo/.test(t)&&vcActiva()!==undefined){const p=vcPrograma();if(p&&p.lista){
    cuerpo=String(cuerpo).replace(/Sitios del plan del PMS con parcheo[^<]*/,'Programa de BTS para este contrato (PROGRAMA FINAL OCTUBRE 2026 BOYACÁ), repartido por prioridad: primero lo que pidió la interventoría, luego grado de daño 3, 2 y 1. Riego y transportes se derivan del volumen. '+(p.some(r=>/modelo/.test(r.nivel||''))?' El resto del contrato va a Cundinamarca: las secciones que el modelo del PMS pone primero (primero las de seguridad); esa parte se actualiza sola cuando el modelo corre con una medición nueva.':'')+' Toque un sitio para abrir su ficha y registrar.');}}}catch(e){}return _mp.apply(this,arguments);};
