@@ -4720,4 +4720,32 @@ function mjEnviar(){const t=(($('mjtxt')||{}).value||'').trim();if(t.length<8){a
  document.addEventListener('error',e=>{const im=e.target;if(!im||im.tagName!='IMG')return;const s=im.getAttribute('src')||'';if(!/^datos\/fotos\//.test(s)||im.dataset.orig)return;im.dataset.orig=s;im.src=SIN_FOTO;im.title='Foto no disponible: toque para reintentar';},true);
  document.addEventListener('click',e=>{const im=e.target;if(!im||im.tagName!='IMG'||!im.dataset.orig)return;e.stopPropagation();e.preventDefault();const o=im.dataset.orig;delete im.dataset.orig;im.src=o+(o.includes('?')?'&':'?')+'r='+Date.now();},true);
 })();
+</script><script>
+// v323 (propuesta de Erix como administrador, 19-nov-2026 3:47 p. m.): «solamente se deben activar los botones cuando ya se apruebe por cada rol;
+// solo dejar aprobar actividades de los trayectos de Boyacá al inspector Fernando Quitián y al coordinador junior Darwin, y lo mismo para el
+// inspector de Cundinamarca Michael Guevara y el coordinador Jhair».
+//  · Cada rol actúa solo en SU paso y en orden: inspector (registrado → revisado), coordinador junior (revisado → validado), gestor y
+//    administrador (validado → aprobado). El administrador sigue viendo todas, pero las que esperan a otro rol salen con el botón apagado y dicen a quién esperan.
+//  · El inspector y el coordinador junior ven y validan solo las obras de su departamento (zona del usuario; «Ambos» o vacío = toda la vía).
+//  · El PC revisa lo mismo (validacion.py): lo que no cumpla no se aplica y queda en la Auditoría.
+const VAL_ESPERA={registrado:'al inspector',revisado:'al coordinador junior',validado:'al gestor'};
+function valZonaOk(o){const r=rolActual();if(r!='inspector'&&r!='coordinador_junior')return true;const z=miZona();if(!z)return true;const zo=zonaDe(o.t);return !zo||zo==z;}
+function valHechas(){let h=[];try{h=JSON.parse(localStorage.getItem('pms_validadas')||'[]');}catch(e){}return new Set(h.map(x=>x.id));}
+function valTodas(){const L=(VERSION&&VERSION.por_validar)||[];const ya=valHechas();return L.filter(o=>!ya.has(o.id)&&o.est!='aprobado'&&o.est!='rechazado'&&valZonaOk(o));}
+porValidar=window.porValidar=function(){const p=miPaso();if(!p)return [];return valTodas().filter(o=>o.est==p[0]);};      // solo lo que le toca (el número del botón y del inicio)
+validarPanel=window.validarPanel=function(){const p=miPaso();if(!p){alert('Su rol no valida obras.');return;}const L=porValidar();const z=(rolActual()=='inspector'||rolActual()=='coordinador_junior')?miZona():'';
+ const esp=puede('administrar')?valTodas().filter(o=>o.est!=p[0]):[];
+ const tarj=(o,activa)=>`<div style="background:#fff;border-radius:8px;padding:8px 10px;margin:6px 0;${activa?'':'opacity:.75'}"><div style="font-size:12px"><b>${o.act}</b> · ${fmt(o.cant,1)} ${o.un} · ${o.fecha}<br><span style="color:#444">Trayecto ${o.t}${zonaDe(o.t)?' ('+zonaDe(o.t)+')':''} · ${o.cz} ${o.car} · PR ${o.p1}${o.p2?'–'+o.p2:''}</span><br><span style="color:#666">${o.contratista||o.usuario} · ${o.contrato} · estado: ${o.est}${o.vpor?' ('+o.vpor+')':''}</span>${o.obs?'<br><i>'+o.obs+'</i>':''}${o.vobs?'<br><i style="color:#b71c1c">Obs. validación: '+o.vobs+'</i>':''}</div>
+  <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap"><button type="button" onclick="masCerrar();ficha('${o.cod}',true)" style="flex:1;background:#fff;color:#004A61;border:1px solid #004A61;border-radius:6px;padding:6px">Ver tramo</button>${activa
+   ?`<button type="button" onclick="validarObra('${o.id}','${p[1]}')" style="flex:1;background:#2e7d32;color:#fff;border:0;border-radius:6px;padding:6px">✓ ${p[1]}</button><button type="button" onclick="validarObra('${o.id}','rechazado')" style="flex:1;background:#b71c1c;color:#fff;border:0;border-radius:6px;padding:6px">✕ Rechazar</button>`
+   :`<button type="button" disabled style="flex:2;background:#eceff1;color:#777;border:0;border-radius:6px;padding:6px">⏳ espera ${VAL_ESPERA[o.est]||'a otro rol'}</button>`}</div></div>`;
+ let h=`<div style="font-size:12px;color:#555;margin:4px 0 8px"><b>${p[2]}</b>: obras de los contratistas que están en «${p[0]}»${z?' en <b>'+esc(z)+'</b>':''}. Al marcar, pasan a «${p[1]}» (o «rechazado» con observación). Cada rol aprueba en su turno: inspector → coordinador junior → gestor.</div>`;
+ h+=L.length?L.map(o=>tarj(o,true)).join(''):'<div style="padding:14px;color:#666;text-align:center">No hay obras pendientes en su paso.</div>';
+ if(esp.length)h+=`<div style="font-size:13px;font-weight:bold;color:#555;margin:12px 0 2px">⏳ En camino (${esp.length}): esperan a otro rol</div>`+esp.slice(0,80).map(o=>tarj(o,false)).join('');
+ masPanel('✅ Validar obras',h);};
+(function(){const _vo=validarObra;validarObra=window.validarObra=function(id,estado){const p=miPaso();const o=((VERSION&&VERSION.por_validar)||[]).find(x=>x.id==id);
+  if(!p||!o){alert('No encuentro esa obra.');return;}
+  if(o.est!=p[0]){alert('Esta obra todavía espera '+(VAL_ESPERA[o.est]||'a otro rol')+': cada rol aprueba en su turno.');return;}
+  if(!valZonaOk(o)){alert('Esta obra es de '+zonaDe(o.t)+': la validan el inspector y el coordinador junior de ese departamento.');return;}
+  return _vo(id,estado);};})();
 </script></body></html>
