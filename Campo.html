@@ -4912,4 +4912,19 @@ validarPanel=window.validarPanel=function(){const p=miPaso();if(!p){alert('Su ro
  const _mp71=masPanel;masPanel=window.masPanel=function(){const r=_mp71.apply(this,arguments);try{const t=$('mjtxt');if(t&&!$('mjfotos')){window._mjFotos=[];t.insertAdjacentHTML('afterend',`<div style="margin:6px 0"><label style="display:inline-block;border:1px solid #004A61;color:#004A61;border-radius:7px;padding:7px 10px;font-size:13px;cursor:pointer">📷 Adjuntar foto o pantallazo (hasta 3)<input id="mjfotos" type="file" accept="image/*" multiple style="display:none" onchange="mjFotosSel(this)"></label><div id="mjfotosv"></div></div>`);}}catch(e){}return r;};
  const _rs71=regSistema;regSistema=window.regSistema=function(tipo,extra){try{if(tipo=='mejora'&&window._mjFotos&&window._mjFotos.length){extra=Object.assign({},extra||{},{fotos:window._mjFotos.slice(0,3)});window._mjFotos=[];}}catch(e){}return _rs71.call(this,tipo,extra);};
 })();
+</script><script>
+// ================= v325f (Erix, 20-nov-2026: «Rafa … en un iPhone no le deja colocar una coma o punto para los decimales en las cantidades»):
+// en el iPhone las casillas numéricas (type="number") abren un teclado SIN coma ni punto. Todas las casillas numéricas de la app pasan a
+// casilla de texto con teclado decimal (inputmode="decimal": en iPhone y Android trae la coma o el punto). Lo que se escribe con coma se
+// guarda con punto (2,45 → 2.45), así los cálculos de la app y del PC no cambian. Se aplica también a las casillas que aparecen después.
+(function(){
+ function arreglar(el){try{if(!el||el.dataset.d72)return;el.dataset.d72='1';const v=el.value;el.type='text';el.setAttribute('inputmode','decimal');el.setAttribute('autocomplete','off');el.setAttribute('enterkeyhint','done');el.value=v;}catch(e){}}
+ function todos(r){try{(r||document).querySelectorAll('input[type="number"]').forEach(arreglar);}catch(e){}}
+ // antes que los oninput de cada casilla (fase de captura): coma → punto, solo números, un solo separador
+ document.addEventListener('input',function(e){const t=e.target;if(!t||!t.dataset||!t.dataset.d72)return;const v=String(t.value||'');
+   let n=v.replace(/,/g,'.').replace(/[^0-9.\-]/g,'');n=n.replace(/(?!^)-/g,'');const i=n.indexOf('.');if(i>=0)n=n.slice(0,i+1)+n.slice(i+1).replace(/\./g,'');
+   if(n!==v){let p=t.selectionStart;t.value=n;try{p=Math.min(p,n.length);t.setSelectionRange(p,p);}catch(_){}}},true);
+ todos();
+ try{new MutationObserver(ms=>{for(const m of ms)for(const nd of m.addedNodes){if(nd.nodeType!==1)continue;if(nd.matches&&nd.matches('input[type="number"]'))arreglar(nd);else if(nd.querySelectorAll)todos(nd);}}).observe(document.documentElement,{childList:true,subtree:true});}catch(e){}
+})();
 </script></body></html>
