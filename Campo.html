@@ -4848,4 +4848,68 @@ validarPanel=window.validarPanel=function(){const p=miPaso();if(!p){alert('Su ro
    const ref=[...P.children].find(x=>x.id=='mjfila'||/acCerrarSesion|vcSalir/.test(x.getAttribute('onclick')||''));if(ref)ref.insertAdjacentHTML('beforebegin',h);else P.insertAdjacentHTML('beforeend',h);
    try{ordenarMas();}catch(e){}}catch(e){console.error(e);}});
 })();
+</script><script>
+// ================= v325e (Erix, 20-nov-2026, propuesta de mejora desde la app): en el usuario del contratista de parcheo
+//  1. casillas de LARGO, ANCHO y ESPESOR: con ellas se calcula al instante el volumen y el costo del tramo que se guarda;
+//  2. casillas de CALIDAD de la instalación: temperatura de la mezcla, % de compactación y clima;
+//  3. la banda naranja «Solo consulta» (al ver el otro contrato) tapaba los botones de abajo (Sitios, Registrar obra, Más…): ahora va arriba;
+//  4. en «Mejoras» se pueden adjuntar fotos (pantallazos) para que la propuesta se revise con la imagen.
+(function(){if(typeof DATA!=='undefined'&&DATA!=='Campo')return;
+ // ---- 3. banda «Solo consulta» arriba, delgada, sin tapar la barra de botones
+ try{const st=document.createElement('style');st.textContent='#vcver317{top:calc(env(safe-area-inset-top,0px) + 30px)!important;bottom:auto!important;z-index:1200!important;padding:5px 10px!important;font-size:12px!important;border-radius:8px!important;opacity:.96}';document.head.appendChild(st);}catch(e){}
+
+ // ---- precios del contrato (igual que la programación del PC: programa_contratos._costos)
+ const rol=a=>{a=String(a||'').toLowerCase();if(/transporte/.test(a)&&/fresad/.test(a))return 'tr_fres';if(/transporte/.test(a)&&/mezcla/.test(a))return 'tr_mez';if(/cama baja|equipos/.test(a))return 'fijo';if(/riego/.test(a))return 'area';if(/fresad/.test(a))return 'fres';if(/parcheo|mdc|mezcla|bacheo|concreto/.test(a))return 'mez';return '';};
+ function costos71(c){const it=(c&&c.items)||[];const X=it.map(i=>({r:rol(i.actividad),pu:+i.precio||0,cap:+i.cantidad||0,act:i.actividad}));
+  const mz=X.filter(x=>x.r=='mez');const capmz=mz.reduce((s,x)=>s+x.cap,0)||1;const pu_mz=mz.length?mz.reduce((s,x)=>s+x.pu*x.cap,0)/capmz:0;
+  const fr=X.filter(x=>x.r=='fres');const pu_fr=fr.length?fr[0].pu:0;const capfr=fr.length&&fr[0].cap?fr[0].cap:capmz;
+  const tr=X.filter(x=>x.r=='tr_fres'||x.r=='tr_mez').reduce((s,x)=>s+x.pu*x.cap/(x.r=='tr_fres'?capfr:capmz),0);
+  const ri=X.filter(x=>x.r=='area');const a=(c&&c.aiu)||{};const fa=1+((+a.A_pct||0)+(+a.I_pct||0)+(+a.U_pct||0))/100+(+a.U_pct||0)/100*(+a.IVA_sobre_U_pct||0)/100;
+  return {fa:fa,por_m3:pu_mz+pu_fr+tr,riego:ri.length?ri[0].pu:0,X:X};}
+ const cop71=v=>'$'+Math.round(v||0).toLocaleString('es-CO');
+ const n71=v=>(+v||0).toLocaleString('es-CO',{maximumFractionDigits:2});
+
+ // ---- 1 y 2. el formulario de obra del contratista
+ const _ch71=campoHtml;campoHtml=function(cod){let h=_ch71.apply(this,arguments);try{if(!(typeof vcActiva=='function'&&vcActiva()))return h;
+   const d=document.createElement('div');d.innerHTML=h;const ca=d.querySelector('#cact');if(!ca||d.querySelector('#c71med'))return h;
+   const inp=(id,w,st)=>`<input id="${id}" type="number" step="${st}" min="0" inputmode="decimal" style="width:${w}px" oninput="c71calc()">`;
+   ca.insertAdjacentHTML('afterend',`<div id="c71med" style="display:none;margin:6px 0;background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:6px 8px;font-size:13px">
+    📐 <b>Medidas del tramo intervenido</b><br>Largo ${inp('c71l',58,'0.1')} m × Ancho ${inp('c71a',58,'0.1')} m<span id="c71ew"> × Espesor ${inp('c71e',52,'0.5')} cm</span>
+    <div id="c71res" style="margin-top:4px;color:#004A61;font-size:12px">Escriba las medidas: la cantidad, el volumen y el costo se calculan solos.</div></div>`);
+   const ob=d.querySelector('#cobra');
+   if(ob&&!d.querySelector('#ctmez'))ob.insertAdjacentHTML('beforeend',`<div id="c71cal" style="margin:6px 0;background:#f4f8f8;border:1px solid #cfd8dc;border-radius:8px;padding:6px 8px;font-size:13px">
+    🌡 <b>Calidad de la instalación</b><br>Temperatura de la mezcla al colocar <input id="ctmez" type="number" step="1" min="0" max="200" inputmode="decimal" style="width:58px"> °C<br>
+    Compactación <input id="cdens" type="number" step="0.1" min="0" max="110" inputmode="decimal" style="width:58px"> % · Clima <select id="c71clima" onchange="c71clima()"><option value="">—</option><option>soleado</option><option>nublado</option><option>llovizna</option><option>lluvia</option></select>
+    <input type="hidden" id="cllcol" value=""></div>`);
+   h=d.innerHTML;}catch(e){console.error(e);}return h;};
+ window.c71clima=function(){const v=(($('c71clima')||{}).value||'');const m={soleado:'no',nublado:'no',llovizna:'llovizna',lluvia:'sí'};if($('cllcol'))$('cllcol').value=m[v]||'';};
+ window.c71calc=function(){try{const box=$('c71med');if(!box||!$('cact'))return;const a=(typeof ACTIV!=='undefined'&&ACTIV[+$('cact').value])||[];const un=String(a[1]||'').toLowerCase();
+   const m3=/m³|m3/.test(un)&&!/km/.test(un),m2=/m²|m2/.test(un);box.style.display=(m3||m2)?'block':'none';if($('c71ew'))$('c71ew').style.display=m3?'inline':'none';if(!(m3||m2))return;
+   const L=+(($('c71l')||{}).value||0),W=+(($('c71a')||{}).value||0),E=+(($('c71e')||{}).value||0);const area=L*W,vol=area*E/100;const res=$('c71res');
+   if(!(L&&W)||(m3&&!E)){if(res)res.innerHTML='Escriba '+(m3?'largo, ancho y espesor':'largo y ancho')+': la cantidad, el volumen y el costo se calculan solos.';return;}
+   const q=m3?vol:area;if($('ccant')){$('ccant').value=+q.toFixed(3);try{costoCalc();}catch(e){}}
+   const c=(typeof vcContrato=='function'&&vcContrato())||{};const K=costos71(c);const it=K.X.find(x=>String(x.act).toLowerCase()==String(a[0]||'').toLowerCase());
+   const cAct=it?q*it.pu*K.fa:0;const esMez=rol(a[0])=='mez';const cTramo=esMez?(vol*K.por_m3+area*K.riego)*K.fa:cAct;
+   window._c71={largo:+L.toFixed(2),ancho:+W.toFixed(2),espesor_cm:m3?E:null,area_m2:+area.toFixed(2),volumen_m3:m3?+vol.toFixed(3):null,costo_actividad:Math.round(cAct),costo_tramo:Math.round(cTramo),act:a[0]};
+   if(res)res.innerHTML=`Área <b>${n71(area)} m²</b>${m3?` · Volumen <b>${n71(vol)} m³</b>`:''} → cantidad ${n71(q)} ${a[1]}<br>💰 Esta actividad (con AIU): <b>${cop71(cAct)}</b>`+
+    (esMez?`<br>💰 <b>Costo del tramo</b> (mezcla + fresado + riego + transportes, con AIU): <b>${cop71(cTramo)}</b>`:'')+`<div style="color:#666;font-size:11px">precios del contrato ${String(c.contrato||'').replace(/[<>&]/g,'')}</div>`;}catch(e){console.error(e);}};
+ // al cambiar de actividad se muestran las casillas que sirven (m³: largo, ancho y espesor; m²: largo y ancho)
+ document.addEventListener('change',e=>{if(e.target&&e.target.id=='cact'){window._c71=null;['c71l','c71a','c71e'].forEach(i=>{if($(i))$(i).value='';});setTimeout(c71calc,0);}},true);
+ const _fi71=window.ficha||ficha;if(typeof ficha=='function'){ficha=window.ficha=function(){const r=_fi71.apply(this,arguments);setTimeout(()=>{try{c71calc();}catch(e){}},50);return r;};}
+ // al guardar: las medidas, el costo del tramo y el clima viajan con la obra (Largo, Ancho, Espesor_cm y el detalle de calidad en el PC)
+ const _gc71=guardarCampo;guardarCampo=window.guardarCampo=function(cod){window._c71g=window._c71&&$('c71med')&&$('c71med').style.display!='none'?Object.assign({},window._c71):null;
+   window._c71clima=(($('c71clima')||{}).value||'');try{return _gc71.apply(this,arguments);}finally{setTimeout(()=>{window._c71g=null;window._c71clima='';},4000);}};
+ const _sr71=setRegistros;setRegistros=window.setRegistros=function(r){try{const g=window._c71g,cl=window._c71clima;if((g||cl)&&r&&r.length){const x=r.filter(z=>z&&z.tipo=='obra'&&!z._c71).slice(-1)[0];
+     if(x&&Date.now()-new Date(x.registrado||0).getTime()<15000){if(g&&String(x.actividad||'')==String(g.act||'')){x.largo=g.largo;x.ancho=g.ancho;if(g.espesor_cm)x.espesor_cm=g.espesor_cm;if(!x.costo_calc&&g.costo_actividad)x.costo_calc=g.costo_actividad;}
+      x.det=Object.assign({},x.det||{});if(g)x.det.medidas={area_m2:g.area_m2,volumen_m3:g.volumen_m3,costo_tramo:g.costo_tramo};if(cl)x.det.calidad=Object.assign({},x.det.calidad||{},{clima:cl});x._c71=1;}}}catch(e){console.error(e);}
+   return _sr71.apply(this,arguments);};
+
+ // ---- 4. fotos en «Mejoras»
+ window._mjFotos=[];
+ function mjComprimir(file){return new Promise(ok=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,1280/Math.max(im.width,im.height));const cv=document.createElement('canvas');cv.width=Math.round(im.width*k);cv.height=Math.round(im.height*k);cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);ok(cv.toDataURL('image/jpeg',0.72));};im.onerror=()=>ok(null);im.src=fr.result;};fr.onerror=()=>ok(null);fr.readAsDataURL(file);});}
+ window.mjFotosSel=async function(inp){const fs=[...(inp.files||[])].slice(0,3-window._mjFotos.length);for(const f of fs){const u=await mjComprimir(f);if(u)window._mjFotos.push(u);}inp.value='';mjFotosVer();};
+ window.mjFotosVer=function(){const z=$('mjfotosv');if(!z)return;z.innerHTML=window._mjFotos.map((u,i)=>`<span style="position:relative;display:inline-block;margin:3px"><img src="${u}" style="height:64px;border-radius:6px;border:1px solid #ccc"><b onclick="window._mjFotos.splice(${i},1);mjFotosVer()" style="position:absolute;top:-6px;right:-6px;background:#b71c1c;color:#fff;border-radius:50%;width:18px;height:18px;font-size:12px;line-height:18px;text-align:center;cursor:pointer">×</b></span>`).join('')+(window._mjFotos.length?`<div style="font-size:11px;color:#666">${window._mjFotos.length} de 3 foto(s)</div>`:'');};
+ const _mp71=masPanel;masPanel=window.masPanel=function(){const r=_mp71.apply(this,arguments);try{const t=$('mjtxt');if(t&&!$('mjfotos')){window._mjFotos=[];t.insertAdjacentHTML('afterend',`<div style="margin:6px 0"><label style="display:inline-block;border:1px solid #004A61;color:#004A61;border-radius:7px;padding:7px 10px;font-size:13px;cursor:pointer">📷 Adjuntar foto o pantallazo (hasta 3)<input id="mjfotos" type="file" accept="image/*" multiple style="display:none" onchange="mjFotosSel(this)"></label><div id="mjfotosv"></div></div>`);}}catch(e){}return r;};
+ const _rs71=regSistema;regSistema=window.regSistema=function(tipo,extra){try{if(tipo=='mejora'&&window._mjFotos&&window._mjFotos.length){extra=Object.assign({},extra||{},{fotos:window._mjFotos.slice(0,3)});window._mjFotos=[];}}catch(e){}return _rs71.call(this,tipo,extra);};
+})();
 </script></body></html>
