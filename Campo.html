@@ -4927,4 +4927,177 @@ validarPanel=window.validarPanel=function(){const p=miPaso();if(!p){alert('Su ro
  todos();
  try{new MutationObserver(ms=>{for(const m of ms)for(const nd of m.addedNodes){if(nd.nodeType!==1)continue;if(nd.matches&&nd.matches('input[type="number"]'))arreglar(nd);else if(nd.querySelectorAll)todos(nd);}}).observe(document.documentElement,{childList:true,subtree:true});}catch(e){}
 })();
+</script><script>
+// ================= v326 (Erix con Darwin y Jhair, 23-nov-2026)
+// (1) Darwin: «asignar algunos daños que se han encontrado al contratista de parcheo y bacheo». En «¿Quién lo arregla?» aparecen los
+//     contratistas de PAVIMENTO con contrato en turno (Castro Tcherassi, parcheo y bacheo; Lápiz de Sueños, sello, slurry y microfresado), solo
+//     en las órdenes de pavimento de su departamento, y la orden le llega con el contrato en turno (el candado entre contratos se respeta).
+// (2) Jhair: además de tomar la foto, CARGAR UNA DE LA GALERÍA (se lee su fecha y su GPS; si es vieja o de otro sitio, se pregunta y queda
+//     marcada «foto cargada») y GUARDAR EL REPORTE SIN FOTO: queda «pendiente de foto» en el celular, no se envía ni crea la orden hasta
+//     que tenga la foto, y el inicio lo recuerda.
+// (3) Erix: si un daño confirmado pide más que lo que el plan tenía (sello → parcheo), el PC reanaliza la sección y CAMBIA EL PLAN. Aquí se
+//     avisa: en la orden («este daño cambió el plan»), en la ficha de la sección y en «✍ Cambios al plan» del gestor («✔ De acuerdo» o «✖ No aplicar»).
+// (4) Si la clave de la IA del PC no funciona, la mejora «en análisis» lo dice (antes quedaba esperando sin explicación).
+(function(){if(typeof DATA==='undefined'||DATA!=='Campo')return;
+ const kn=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+ const H=s=>(typeof esc=='function'?esc(s):String(s==null?'':s));
+ const LS=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v;}catch(e){return d;}};
+ const LSset=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
+ const rol=()=>{try{return typeof rolActual=='function'?rolActual():(localStorage.getItem('pms_rol')||'');}catch(e){return '';}};
+ const yo=()=>localStorage.getItem('pms_usuario')||'';
+
+ // ---------------------------------------------------------------- (1) contratistas de pavimento en «¿Quién lo arregla?»
+ window.C73_EJ={};
+ function c73Contratos(){try{return (typeof ESTADO!='undefined'&&ESTADO.contratos&&ESTADO.contratos.length)?ESTADO.contratos:((VERSION&&VERSION.contratos)||[]);}catch(e){return [];}}
+ function c73EsPav(c){if(c.alcance)return c.alcance=='pavimento';return /carpeta asf|parcheo|bacheo|slurry|microfresado|sello de fisuras/.test(String(c.objeto||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase());}
+ function c73Opciones(){try{const L=c73Contratos().filter(c73EsPav);if(!L.length)return;const por={};
+   L.forEach(c=>{const w=String(c.contratista||'').trim().split(/\s+/)[0]||c.contrato;(por[w]=por[w]||[]).push(c);});
+   Object.keys(por).forEach(w=>{const cs=por[w];if(EJ_OPC.some(e=>e[0]!=w&&kn(e[0])==kn(w)))return;      // ya estaba (p. ej. Corseing)
+    const t=cs.find(c=>!c.bloqueado_por)||cs[0];const ob=String(cs.map(c=>c.objeto).join(' ')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const que=/carpeta asf|parcheo|bacheo/.test(ob)?'parcheo y bacheo':'sello de fisuras, slurry y microfresado';
+    const z=[...new Set(cs.flatMap(c=>c.zonas||[]))];const nombre=String(t.contratista||w).replace(/\s+(S\.?A\.?S?\.?|SAS)\.?$/i,'');
+    C73_EJ[w]={ctr:t.contrato,zonas:z,que:que,nombre:nombre,sinActa:!t.fecha_inicio,turno:!t.bloqueado_por};
+    const lab=`🚧 ${nombre} · ${que} (${t.contrato}${t.bloqueado_por?'':' en turno'}${!t.fecha_inicio?' · sin acta de inicio':''})`;
+    const i=EJ_OPC.findIndex(e=>e[0]==w);if(i>=0)EJ_OPC[i][1]=lab;else{const k=EJ_OPC.findIndex(e=>e[0]=='SinContratista');EJ_OPC.splice(k<0?EJ_OPC.length:k,0,[w,lab]);}});}catch(e){console.error('c73Opciones',e);}}
+ window.c73Opciones=c73Opciones;c73Opciones();[1500,6000,20000].forEach(t=>setTimeout(c73Opciones,t));
+ const c73Sirve=(k,o)=>{const m=C73_EJ[k];if(!m)return true;if(o&&o.cl&&o.cl!='pav')return false;const z=o?(o.z||(typeof zonaDe=='function'?zonaDe(o.t):'')):'';return !m.zonas.length||!z||m.zonas.includes(z);};
+ const _ot73=otTarjeta;otTarjeta=window.otTarjeta=function(o,modo){c73Opciones();let h=_ot73.apply(this,arguments);
+  try{if(modo=='revisar'){Object.keys(C73_EJ).forEach(k=>{if(!c73Sirve(k,o))h=h.replace(new RegExp('<option value="'+k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'"[^>]*>[^<]*</option>','g'),'');});
+     const pav=Object.keys(C73_EJ).filter(k=>c73Sirve(k,o)&&C73_EJ[k].turno&&/parcheo/.test(C73_EJ[k].que));
+     if(o.cl=='pav'&&!o.ej&&!o.sug&&pav.length){const m=C73_EJ[pav[0]];const tip=`<div style="font-size:12px;margin:2px 0 4px;color:#6a1b9a">💡 Daño del pavimento: puede dárselo al contratista de parcheo <b>${H(m.nombre)}</b> (${H(m.ctr)} en turno) en «¿quién lo arregla?».</div>`;
+      const k=h.indexOf('<div style="display:flex;gap:6px;width:100%;margin-bottom:6px"><select id="otp_'+o.id);if(k>=0)h=h.slice(0,k)+tip+h.slice(k);}}
+   const aj=c73AjDeOrden(o);if(aj)h=h.replace(/<\/div>\s*$/,c73AjCaja(aj,true)+'</div>');}catch(e){console.error(e);}return h;};
+ const _orv73=otRevisar;otRevisar=window.otRevisar=function(id){try{const s=$('otc_'+id);const v=s?s.value:'';const m=C73_EJ[v];const o=ordenes().find(x=>x.id==id);
+   if(m&&o&&!(o.sug&&typeof ejDeSug=='function'&&ejDeSug(o)==v)){const p=$('otp_'+id)?$('otp_'+id).value:'2';
+    ordenEvento(id,'revisar',{prioridad:p,ejecutor:v,contrato:m.ctr},{est:'revisada',p:p,cu:'',ej:v,ctr:m.ctr,rpor:yo(),rvf:ahoraLocal()});
+    try{avisoCorto('✔ Orden para '+m.nombre+' ('+m.ctr+'): le llega en su app.');}catch(e){}otLista();return;}}catch(e){console.error(e);}
+  return _orv73.apply(this,arguments);};
+
+ // ---------------------------------------------------------------- (3) cambios del plan por daño confirmado
+ const AJ=()=>{try{return ((VERSION&&VERSION.relaciones)||{}).ajustes_plan||[];}catch(e){return [];}};
+ const AJ_VIG=['aplicado al plan','confirmado por el gestor','en el plan del modelo'];
+ function c73AjDeOrden(o){if(!o||o.cl!='pav')return null;const L=AJ();return L.find(a=>(a.fuentes||[]).includes(o.id))||L.find(a=>a.cod==o.cod&&AJ_VIG.includes(a.est))||null;}
+ window.c73AjDeOrden=c73AjDeOrden;
+ const ESTX={'aplicado al plan':['🔁 Este daño cambió el plan de la sección','#6a1b9a'],'en el plan del modelo':['🔁 El plan de la sección ya incluye el cambio por este daño','#6a1b9a'],
+  'confirmado por el gestor':['🔁 Plan cambiado por este daño (el gestor estuvo de acuerdo)','#2e7d32'],'no aplicado (gestor)':['El gestor decidió no cambiar el plan por este daño','#757575'],
+  'cubierto por el programa del contrato':['✔ El daño ya queda cubierto: la sección está en el programa del contratista','#2e7d32'],'sugerido (el modelo decide)':['💡 Daño superficial: el modelo lo tiene en cuenta en su próxima corrida','#00695c'],
+  'ya no aplica':['Ya no cambia el plan (el daño se arregló o el plan ya alcanza)','#757575']};
+ function c73AjCaja(a,corta){const e=ESTX[a.est]||[a.est,'#555'];
+  return `<div class="c73aj" style="border-left:4px solid ${e[1]};background:#f7f2fa;border-radius:6px;padding:6px 8px;margin-top:6px;font-size:12.5px;line-height:1.35">
+   <b style="color:${e[1]}">${e[0]}</b><br>Plan ${H(a.anio)}: <s style="color:#888">${H(a.plan)}</s> → <b>${H(a.nueva)}</b>${a.costo?' · ≈ '+(typeof cop=='function'?cop(a.costo):'$'+Math.round(a.costo).toLocaleString('es-CO')):''}
+   ${corta?'':`<div style="color:#444;margin-top:3px">${H(a.mot)}</div><div style="color:#555;margin-top:3px">📐 ${H(a.ana)}</div>`}
+   ${a.gpor?`<div style="color:#666;font-size:11px;margin-top:2px">${H(a.gpor)}${a.gobs?': '+H(a.gobs):''}</div>`:''}</div>`;}
+ // en la ficha de la sección
+ const _fi73=window.ficha||ficha;ficha=window.ficha=function(cod){const r=_fi73.apply(this,arguments);try{const box=$('ficha');
+   if(box&&cod&&fichaCod==cod&&!window.REV_ACTIVO&&!box.querySelector('#c73ajf')){const a=AJ().find(x=>x.cod==cod&&x.est!='ya no aplica');
+    if(a){const h=`<div id="c73ajf">${c73AjCaja(a,false)}</div>`;const d=box.querySelector('details');if(d)d.insertAdjacentHTML('beforebegin',h);else box.insertAdjacentHTML('beforeend',h);}}}catch(e){console.error(e);}return r;};
+ // el gestor (y el administrador): «✍ Cambios al plan» trae también los cambios por daño, con «De acuerdo» o «No aplicar»
+ const ajPend=()=>{try{if(typeof rvgFirmo!='function'||!rvgFirmo())return [];const L=typeof rvgLocal=='function'?rvgLocal():{};return AJ().filter(a=>a.est=='aplicado al plan'&&!L[a.id]);}catch(e){return [];}};
+ window.c73AjPend=ajPend;
+ function ajTarjeta(a){const pr=typeof prTxt=='function'?prTxt(+a.pr):a.pr;
+  return `<div style="background:#fff;border-radius:10px;padding:10px;margin:8px 0;border-left:5px solid #6a1b9a;font-size:13px;line-height:1.4">
+   <b style="font-size:14px">Trayecto ${H(a.t)} · ${H(a.cz)} ${H(a.car)} · PR ${pr}</b><div style="color:#666;font-size:11.5px">${H(a.cod)} · ${H(a.z||'')} · detectado el ${H(a.f)}</div>
+   ${c73AjCaja(a,false)}
+   <textarea id="ajn_${a.id}" placeholder="Su nota (obligatoria si no lo aplica)" style="width:100%;box-sizing:border-box;font-size:14px;min-height:40px;margin-top:6px"></textarea>
+   <div style="display:flex;gap:6px;margin-top:6px"><button type="button" onclick="c73AjFirmar('${a.id}','aprobar')" style="flex:1;border:0;border-radius:8px;padding:11px;background:#2e7d32;color:#fff;font-weight:bold;font-size:14px">✔ De acuerdo</button>
+   <button type="button" onclick="c73AjFirmar('${a.id}','rechazar')" style="flex:1;border:0;border-radius:8px;padding:11px;background:#c62828;color:#fff;font-weight:bold;font-size:14px">✖ No aplicar</button>
+   <button type="button" onclick="masCerrar();try{irA('${a.cod}',true);}catch(e){}" style="flex:0 0 auto;border:1px solid #004A61;border-radius:8px;padding:11px;background:#fff;color:#004A61;font-size:13px">🗺 Ver</button></div></div>`;}
+ window.c73AjFirmar=function(id,ev){const a=AJ().find(x=>x.id==id);if(!a)return;const obs=(($('ajn_'+id)||{}).value||'').trim();
+  if(ev=='rechazar'&&!obs){alert('Escriba en la nota por qué no lo aplica: queda en la constancia del plan.');return;}
+  if(!confirm((ev=='aprobar'?'¿Está de acuerdo con el cambio':'¿No aplicar el cambio')+' en '+a.cod+'?'))return;
+  regSistema('revision_gestor',{evento:ev,id_revision:id,codigo:a.cod,observacion:obs});const L=typeof rvgLocal=='function'?rvgLocal():{};L[id]=ev;LSset('pms_rvg',L);try{sincronizar();}catch(e){}
+  avisoCorto(ev=='aprobar'?'✔ Confirmado: el cambio queda en el plan y el sistema aprende de él.':'✔ No se aplica: el plan vuelve a lo que tenía en la próxima corrida del modelo.');rvgLista();};
+ if(typeof rvgLista=='function'){rvgLista=window.rvgLista=function(){const L=typeof rvgPend=='function'?rvgPend():[];const A=ajPend();
+  masPanel('✍ Cambios al plan por aprobar',(A.length?`<div style="font-size:15px;font-weight:bold;color:#6a1b9a;margin:6px 0 2px">🔁 Cambios por daños detectados en campo (${A.length})</div><div style="font-size:12.5px;color:#555;margin-bottom:4px">El daño confirmado pide más de lo que el plan tenía; el PC analizó la sección y <b>ya cambió el plan</b>. Si no está de acuerdo, «No aplicar».</div>`+A.map(ajTarjeta).join(''):'')+
+   `<div style="font-size:15px;font-weight:bold;color:#004A61;margin:10px 0 2px">✍ Cambios hechos en campo que esperan su firma</div><div style="font-size:13px;color:#555;margin:4px 0 6px">Cambios grandes que hicieron en campo al plan (quitar la obra, cambiar la actividad o mover mucho una cantidad). <b>Mientras usted no los apruebe, el plan sigue igual.</b> Si aprueba, entran al plan y el sistema aprende de ellos; si rechaza, se quedan por fuera.</div>`+
+   (L.length?L.map(rvgTarjeta).join(''):'<div style="padding:16px;color:#2e7d32;text-align:center;font-size:15px">✔ No hay cambios esperando su firma.</div>')+
+   `<button type="button" onclick="inicioRol()" style="width:100%;margin-top:8px;border:0;border-radius:8px;padding:11px;background:#eceff1;font-size:14px">🏠 Volver al inicio</button>`);};}
+ // la lista para el coordinador junior y el inspector (solo consulta)
+ window.c73AjLista=function(){const z=typeof miZona=='function'?miZona():'';const L=AJ().filter(a=>a.est!='ya no aplica'&&(!z||!a.z||a.z==z));
+  masPanel('🔁 Cambios del plan por daños detectados',`<div style="font-size:13px;color:#555;margin:4px 0 6px">Daños confirmados en campo que piden más de lo que el plan tenía. El PC analizó cada sección y cambió la actividad del plan.</div>`+
+   (L.length?L.map(a=>`<div style="background:#fff;border-radius:10px;padding:10px;margin:8px 0;font-size:13px"><b>Trayecto ${H(a.t)} · ${H(a.cz)} ${H(a.car)} · PR ${typeof prTxt=='function'?prTxt(+a.pr):a.pr}</b>${c73AjCaja(a,false)}<button type="button" onclick="masCerrar();try{irA('${a.cod}',true);}catch(e){}" style="margin-top:6px;border:1px solid #004A61;border-radius:8px;padding:8px 12px;background:#fff;color:#004A61">🗺 Ver en el mapa</button></div>`).join(''):'<div style="padding:22px;text-align:center;color:#2e7d32">✔ No hay cambios del plan por daños.</div>')+
+   `<button type="button" onclick="inicioRol()" style="width:100%;margin-top:8px;border:0;border-radius:8px;padding:11px;background:#eceff1;font-size:14px">🏠 Volver al inicio</button>`);};
+ inicioRolPaso('v326 cambios del plan por daño',function(){try{const box=masCaja();const g=box&&[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g)return;
+   const r=rol();const firma=typeof rvgFirmo=='function'&&rvgFirmo();
+   if(firma){const c=g.querySelector('.c62');const n=(typeof rvgPend=='function'?rvgPend().length:0)+ajPend().length;if(c&&n&&!c.querySelector('.c73n')){c.style.background='#6a1b9a';c.style.color='#fff';
+     c.querySelectorAll('span').forEach(s=>{if(/position:absolute/.test(s.getAttribute('style')||''))s.remove();});
+     c.insertAdjacentHTML('beforeend',`<span class="c73n" style="position:absolute;top:8px;right:8px;background:#d32f2f;color:#fff;border-radius:12px;min-width:24px;height:24px;line-height:24px;font-size:13px;font-weight:bold;padding:0 6px">${n}</span>`);
+     const sub=[...c.querySelectorAll('div')].find(d=>/font-size:11px/.test(d.getAttribute('style')||''));if(sub)sub.textContent='esperan su revisión';}}
+   else if(/coordinador_junior|inspector/.test(r)&&!g.querySelector('.c73c')){const z=typeof miZona=='function'?miZona():'';const n=AJ().filter(a=>AJ_VIG.includes(a.est)&&(!z||!a.z||a.z==z)).length;
+     if(n)g.insertAdjacentHTML('beforeend',`<div class="c73c" onclick="c73AjLista()" style="position:relative;background:#f3e5f5;color:#4a148c;border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px"><div style="font-size:34px;line-height:1.1">🔁</div><div style="font-size:14px;font-weight:bold;margin-top:4px">Plan cambiado por daños</div><div style="font-size:11px;opacity:.85">${n} sección(es)</div></div>`);}
+   // aviso de lo nuevo (una vez por cambio)
+   const vis=LS('pms_aj_vistos',[]);const z=typeof miZona=='function'?miZona():'';const nuevos=AJ().filter(a=>a.est=='aplicado al plan'&&!vis.includes(a.id)&&(firma||(/coordinador_junior/.test(r)&&(!z||!a.z||a.z==z))));
+   if(nuevos.length){LSset('pms_aj_vistos',vis.concat(nuevos.map(a=>a.id)).slice(-400));setTimeout(()=>{try{avisoCorto('🔁 Cambió el plan en '+nuevos.length+' sección(es) por daños detectados en campo'+(firma?': revíselos en ✍ Cambios al plan.':'.'));}catch(e){}},700);}}catch(e){console.error('v326 inicio',e);}});
+
+ // ---------------------------------------------------------------- (2) foto de la galería y reporte «pendiente de foto»
+ window.C73_GAL={};
+ function c73Exif(buf){try{const v=new DataView(buf);if(v.getUint16(0)!=0xFFD8)return {};let o=2;const L=v.byteLength;
+   while(o<L-10){const m=v.getUint16(o);if(m==0xFFE1){if(v.getUint32(o+4)==0x45786966)return c73Tiff(v,o+10);o+=2+v.getUint16(o+2);}else if((m&0xFF00)==0xFF00&&m!=0xFFDA){o+=2+v.getUint16(o+2);}else break;}return {};}catch(e){return {};}}
+ function c73Tiff(v,t){const le=v.getUint16(t)==0x4949;const g16=p=>v.getUint16(p,le),g32=p=>v.getUint32(p,le);const out={};
+  const ifd=(p,cb)=>{const n=g16(p);for(let i=0;i<n;i++){const e=p+2+i*12;cb(g16(e),g32(e+4),e+8);}};
+  const str=(off,c)=>{let s='';for(let i=0;i<c-1;i++)s+=String.fromCharCode(v.getUint8(t+off+i));return s;};const rat=o=>g32(t+o)/(g32(t+o+4)||1);let ex=0,gp=0;
+  ifd(t+g32(t+4),(tag,c,vo)=>{if(tag==0x8769)ex=g32(vo);if(tag==0x8825)gp=g32(vo);if(tag==0x0132&&!out.fecha)out.fecha=str(g32(vo),c);});
+  if(ex)ifd(t+ex,(tag,c,vo)=>{if(tag==0x9003)out.fecha=str(g32(vo),c);});
+  if(gp){let la=null,lo=null,a='N',b='E';ifd(t+gp,(tag,c,vo)=>{if(tag==1)a=String.fromCharCode(v.getUint8(vo));if(tag==3)b=String.fromCharCode(v.getUint8(vo));
+    if(tag==2){const p=g32(vo);la=rat(p)+rat(p+8)/60+rat(p+16)/3600;}if(tag==4){const p=g32(vo);lo=rat(p)+rat(p+8)/60+rat(p+16)/3600;}});
+   if(la!=null&&lo!=null&&(la||lo)){out.lat=a=='S'?-la:la;out.lon=b=='W'?-lo:lo;}}return out;}
+ window.c73Exif=c73Exif;
+ const c73Fecha=s=>{const m=String(s||'').match(/(\d{4})[:\-](\d{2})[:\-](\d{2})[ T](\d{2}):(\d{2})/);return m?new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5]):null;};
+ const c73Dist=(a,b,c,d)=>{const R=6371000,r=x=>x*Math.PI/180;const x=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;return 2*R*Math.asin(Math.sqrt(x));};
+ const fmtF=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+ // lee el archivo, revisa fecha y ubicación, lo achica y le pone la marca «foto cargada»; cb(dataURL, meta) o nada si el usuario no la acepta
+ window.c73CargarFoto=function(file,cb){if(!file)return;const fr=new FileReader();fr.onload=()=>{const ex=c73Exif(fr.result);let f=c73Fecha(ex.fecha);const deArchivo=!f;if(!f&&file.lastModified)f=new Date(file.lastModified);
+   const dias=f?(Date.now()-f.getTime())/864e5:null;const meta={origen:'galeria',fecha_foto:f?fmtF(f):'',fecha_de:deArchivo?'archivo':'foto',lat_foto:ex.lat==null?null:+ex.lat.toFixed(6),lon_foto:ex.lon==null?null:+ex.lon.toFixed(6),cargada:fmtF(new Date())};
+   let dist=null;try{if(ex.lat!=null&&typeof ultimaPos!='undefined'&&ultimaPos)dist=Math.round(c73Dist(ultimaPos[0],ultimaPos[1],ex.lat,ex.lon));}catch(e){}meta.dist_m=dist;
+   const avisos=[];if(dias!=null&&dias>3)avisos.push('la foto es del '+fmtF(f).slice(0,10)+' (hace '+Math.round(dias)+' días)');if(dias==null)avisos.push('la foto no dice cuándo se tomó');if(dist!=null&&dist>300)avisos.push('se tomó a '+(dist>=1000?(dist/1000).toFixed(1)+' km':dist+' m')+' de donde está usted');
+   if(avisos.length&&!confirm('🖼 Ojo: '+avisos.join(' y ')+'.\n\n¿Es de este sitio y de este daño? Quedará marcada «foto cargada» con su fecha para que quien valide lo sepa.'))return;
+   const url=URL.createObjectURL(file);const im=new Image();im.onload=()=>{try{const M=1600,k=Math.min(1,M/Math.max(im.naturalWidth,im.naturalHeight));const cv=document.createElement('canvas');cv.width=Math.round(im.naturalWidth*k);cv.height=Math.round(im.naturalHeight*k);
+     const x=cv.getContext('2d');x.drawImage(im,0,0,cv.width,cv.height);const fs=Math.max(14,Math.round(cv.width/45));x.fillStyle='rgba(0,0,0,.55)';x.fillRect(0,cv.height-fs*1.8,cv.width,fs*1.8);x.fillStyle='#fff';x.font='bold '+fs+'px sans-serif';
+     x.fillText('🖼 Foto cargada · '+(f?(deArchivo?'archivo del ':'tomada el ')+fmtF(f):'sin fecha')+' · por '+(yo()||'—'),fs*0.6,cv.height-fs*0.6);const d=cv.toDataURL('image/jpeg',0.85);URL.revokeObjectURL(url);C73_GAL[d]=meta;cb(d,meta);}catch(e){alert('No se pudo leer la imagen: '+e.message);}};
+   im.onerror=()=>{URL.revokeObjectURL(url);alert('Ese archivo no es una imagen que el celular pueda abrir (pruebe con una foto JPG).');};im.src=url;};fr.readAsArrayBuffer(file.slice(0,262144));};
+ window.c73Galeria=function(){const i=document.createElement('input');i.type='file';i.accept='image/*';i.multiple=true;i.onchange=()=>{[...i.files].slice(0,4).forEach(f=>c73CargarFoto(f,d=>{if(ROL_FOTOS.length>=4){alert('Máximo 4 fotos.');return;}ROL_FOTOS.push(d);rolFotosRender();}));};i.click();};
+ const _mp73=masPanel;masPanel=window.masPanel=function(){const r=_mp73.apply(this,arguments);try{const b=document.querySelector('#masbox button[onclick="rolFotoCam()"]');
+   if(b&&!document.getElementById('c73gal'))b.insertAdjacentHTML('afterend',`<button type="button" id="c73gal" onclick="c73Galeria()" style="width:100%;border:1px solid #004A61;border-radius:8px;padding:11px;background:#fff;color:#1565c0;font-weight:bold;font-size:14px;margin:2px 0 4px">🖼 Cargar foto de la galería</button><div style="font-size:11px;color:#666">Si no tiene foto ahora, puede guardar igual: queda «pendiente de foto» en este celular y se envía cuando se la agregue.</div>`);}catch(e){}return r;};
+ // la foto cargada queda marcada en el registro (qué foto, su fecha y su GPS)
+ const _sr73=setRegistros;setRegistros=window.setRegistros=function(r){try{const x=r&&r[r.length-1];if(x&&Array.isArray(x.fotos)&&x.fotos.some(f=>C73_GAL[f])&&!x._c73){x._c73=1;x.fotos_meta=x.fotos_meta||x.fotos.map(()=>({}));
+    const ms=[];x.fotos.forEach((f,i)=>{const m=C73_GAL[f];if(m){x.fotos_meta[i]=Object.assign({},x.fotos_meta[i]||{},m);ms.push(m);}});
+    x.observacion=String(x.observacion||'')+' · 🖼 '+ms.length+' foto(s) cargada(s) de la galería ('+ms.map(m=>m.fecha_foto?((m.fecha_de=='archivo'?'archivo del ':'tomada el ')+m.fecha_foto.slice(0,10)):'sin fecha').join(', ')+')';}}catch(e){}return _sr73.apply(this,arguments);};
+ // guardar sin foto → «pendiente de foto» (queda en este celular; no se envía ni crea la orden hasta tener la foto)
+ const BORR='pms_sin_foto';const borr=()=>LS(BORR,[]);const borrSet=L=>{LSset(BORR,L);};
+ function guardarBase(r){try{REGS=r;IDB.put('kv','registros',r).then(()=>{try{localStorage.removeItem('pms_campo2');}catch(e){}}).catch(()=>{try{localStorage.setItem('pms_campo2',JSON.stringify(r));}catch(e){}});}catch(e){_sr73(r);}}
+ function sinFoto(nombre){const f=window[nombre];if(typeof f!='function')return;window[nombre]=function(){if(ROL_FOTOS.length)return f.apply(this,arguments);
+   if(!confirm('No tiene foto.\n\n¿Guardar el reporte «PENDIENTE DE FOTO»? Queda en este celular, no se envía ni crea la orden hasta que le agregue la foto (desde la galería o con la cámara). En el inicio verá «📷 Reportes sin foto».'))return;
+   const n0=registros().length;const a0=window.alert,s0=window.sincronizar;ROL_FOTOS=['PENDIENTE_FOTO'];
+   window.alert=m=>{if(/guardad/i.test(String(m)))return;a0(m);};window.sincronizar=()=>{};
+   try{f.apply(this,arguments);}finally{window.alert=a0;window.sincronizar=s0;if(ROL_FOTOS[0]=='PENDIENTE_FOTO')ROL_FOTOS=[];}
+   try{const R=registros();const i=R.findIndex((x,k)=>k>=n0-1&&Array.isArray(x.fotos)&&x.fotos.includes('PENDIENTE_FOTO'));
+    if(i>=0){const x=R.splice(i,1)[0];x.fotos=[];x.fotos_meta=[];x.pendiente_foto=1;x.guardado_sin_foto=new Date().toISOString();const B=borr();B.push(x);borrSet(B);guardarBase(R);try{nReg();}catch(e){}
+     a0('📷 Reporte guardado PENDIENTE DE FOTO. Agréguele la foto en el inicio («📷 Reportes sin foto»): ahí se envía y se crea la orden.');try{inicioRol();}catch(e){}}}catch(e){console.error(e);}
+   try{s0&&s0();}catch(e){}};}
+ ['repGuardar','infraGuardar'].forEach(sinFoto);
+ function borrAgregar(i,d,meta){const B=borr();const x=B[i];if(!x)return;x.fotos=[d];x.fotos_meta=[Object.assign({uso:'sin_ia',foto_agregada:fmtF(new Date())},meta||{})];
+  x.observacion=String(x.observacion||'')+' · 📷 foto agregada después ('+fmtF(new Date())+(meta&&meta.fecha_foto?'; '+(meta.fecha_de=='archivo'?'archivo del ':'tomada el ')+meta.fecha_foto:'')+')';
+  delete x.pendiente_foto;B.splice(i,1);borrSet(B);const R=registros();R.push(x);guardarBase(R);try{nReg();}catch(e){}try{sincronizar();}catch(e){}
+  avisoCorto('✔ Foto agregada: el reporte se envía y crea la orden.');c73SinFotoLista();}
+ window.c73SinFotoCam=function(i){try{fotoUsoSel('sin_ia',true);}catch(e){}camAbrir('foto',d=>borrAgregar(i,d,null),{tipo:'obra',n:0});};
+ window.c73SinFotoGal=function(i){const inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.onchange=()=>{const f=inp.files[0];if(f)c73CargarFoto(f,(d,m)=>borrAgregar(i,d,m));};inp.click();};
+ window.c73SinFotoBorrar=function(i){if(!confirm('¿Borrar este reporte sin foto? No se envió a nadie.'))return;const B=borr();B.splice(i,1);borrSet(B);c73SinFotoLista();};
+ window.c73SinFotoLista=function(){const B=borr();masPanel('📷 Reportes sin foto',`<div style="font-size:13px;color:#555;margin:4px 0 6px">Están guardados solo en este celular. Agrégueles la foto (cámara o galería) y se envían solos; ahí se crea la orden y entran a validación.</div>`+
+  (B.length?B.map((x,i)=>{const dias=Math.floor((Date.now()-new Date(x.guardado_sin_foto||x.registrado||Date.now()).getTime())/864e5);return `<div style="background:#fff;border-radius:10px;padding:10px;margin:8px 0;font-size:13px;border-left:5px solid ${dias>=1?'#c62828':'#ef6c00'}">
+   <b>${H(x.trayecto?('Trayecto '+x.trayecto+(x.calzada?' · '+x.calzada:'')+(x.pr_ini!=null&&typeof prTxt=='function'?' · PR '+prTxt(+x.pr_ini):'')):(x.elemento&&x.elemento.sitio)||'Reporte')}</b><div style="color:#444;margin-top:3px">${H(String(x.observacion||'').replace(/^\[[^\]]*\]\s*/,'').slice(0,220))}</div>
+   <div style="color:#888;font-size:11px;margin-top:2px">Guardado el ${H(String(x.fecha||'').slice(0,10))}${dias>=1?' · <b style="color:#c62828">hace '+dias+' día(s)</b>':''}</div>
+   <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button type="button" onclick="c73SinFotoCam(${i})" style="flex:1;border:0;border-radius:8px;padding:10px;background:#004A61;color:#fff;font-weight:bold">📷 Tomar foto</button><button type="button" onclick="c73SinFotoGal(${i})" style="flex:1;border:1px solid #004A61;border-radius:8px;padding:10px;background:#fff;color:#1565c0;font-weight:bold">🖼 Galería</button><button type="button" onclick="c73SinFotoBorrar(${i})" style="flex:0 0 auto;border:0;border-radius:8px;padding:10px;background:#eceff1">🗑</button></div></div>`;}).join(''):'<div style="padding:22px;text-align:center;color:#2e7d32">✔ No hay reportes esperando foto.</div>')+
+  `<button type="button" onclick="inicioRol()" style="width:100%;margin-top:8px;border:0;border-radius:8px;padding:11px;background:#eceff1;font-size:14px">🏠 Volver al inicio</button>`);};
+ inicioRolPaso('v326 reportes sin foto',function(){try{const B=borr();if(!B.length)return;const box=masCaja();const g=box&&[...box.querySelectorAll('div')].find(d=>/grid-template-columns/.test(d.getAttribute('style')||''));if(!g||g.querySelector('.c73f'))return;
+   g.insertAdjacentHTML('afterbegin',`<div class="c73f" onclick="c73SinFotoLista()" style="position:relative;background:#c62828;color:#fff;border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:104px"><div style="font-size:34px;line-height:1.1">📷</div><div style="font-size:14px;font-weight:bold;margin-top:4px">Reportes sin foto</div><div style="font-size:11px;opacity:.9">agrégueles la foto para enviarlos</div><span style="position:absolute;top:8px;right:8px;background:#fff;color:#c62828;border-radius:12px;min-width:24px;height:24px;line-height:24px;font-size:13px;font-weight:bold;padding:0 6px">${B.length}</span></div>`);
+   if(!window._c73rec){window._c73rec=1;setTimeout(()=>{try{avisoCorto('📷 Tiene '+B.length+' reporte(s) esperando la foto: no se han enviado.');}catch(e){}},900);}}catch(e){console.error('v326 sin foto',e);}});
+
+ // ---------------------------------------------------------------- (4) la clave de la IA del PC no funciona
+ const IA=()=>{try{return ((VERSION&&VERSION.relaciones)||{}).ia_estado||{};}catch(e){return {};}};
+ if(typeof mjModulo=='function'){const _mj73=mjModulo;mjModulo=window.mjModulo=function(){const r=_mj73.apply(this,arguments);try{const e=IA();if(e.ok===false){
+    const txt='⚠ La clave de la IA del PC no funciona'+(e.desde?' desde el '+e.desde:'')+': el análisis queda esperando hasta que Erix la cambie (Cambiar_Clave_IA.bat en el PC).';
+    document.querySelectorAll('#masbox div').forEach(d=>{if(d.children.length==0&&/El análisis llega en la próxima publicación del PC/.test(d.textContent)){d.textContent=txt;d.style.color='#c62828';d.style.fontWeight='bold';}});
+    if(typeof mjDecide=='function'&&mjDecide()&&!document.getElementById('c73ia')){const b=document.querySelector('#masbox');const t=b&&b.querySelector('div[style*="overflow:auto"]');
+     if(t)t.insertAdjacentHTML('afterbegin',`<div id="c73ia" style="background:#ffebee;border:1px solid #c62828;color:#b71c1c;border-radius:8px;padding:8px 10px;margin:4px 0 8px;font-size:13px">${H(txt)}${e.error?'<div style="font-size:11px;color:#888;margin-top:2px">'+H(e.error)+'</div>':''}</div>`);}}}catch(err){}return r;};}
+})();
 </script></body></html>
