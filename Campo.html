@@ -5512,6 +5512,7 @@ async function ambExcelArmar(ExcelJS,plantilla,insp,asps){
 </script><script>
 // v335 (Erix, 25-nov-2026): «cuando se apruebe una mejora, mostrar el progreso de cómo va, para validar si está avanzando»
 // y «ordenar por prioridad las propuestas nuevas para revisar solo las que valen la pena».
+// v335b: en «Aprobadas» también el turno en que se van a programar y el avance total de todas.
 //  · «Por decidir»: las propuestas salen en el orden sugerido por el PC (prioridad, esfuerzo, tema y si la pidió un usuario) con su número.
 //  · «Aprobadas»: cada una muestra una barra de avance (0–100 %), la etapa (en cola, en programación, en pruebas, instalada…),
 //    la nota de lo que se ha hecho y cuándo se actualizó. Si lleva más de 3 días sin moverse, se marca en naranja.
@@ -5535,6 +5536,18 @@ async function ambExcelArmar(ExcelJS,plantilla,insp,asps){
      conOrden.sort((a,b)=>(+a.m.orden||9999)-(+b.m.orden||9999)).forEach(x=>padre.insertBefore(x.d,ref));
      if(!caja.querySelector('.n77'))conOrden[0].d.insertAdjacentHTML('beforebegin','<div class="n77" style="font-size:12px;color:#555;margin:2px 0 4px">Ordenadas por <b>prioridad sugerida</b> (1 = la que más conviene decidir primero): pesa la prioridad que dio el agente, el esfuerzo, si toca seguridad o datos y si la pidió alguien que usa la app.</div>');}}
    if(t=='aprobadas'){
+    // v335b: turno de trabajo (1 = la que se programa primero) y resumen del avance de todas las aprobadas
+    const conT=cards.map(d=>({d,m:por[idDe(d)]})).filter(x=>x.m);
+    conT.forEach(({d,m})=>{if(m.orden&&!d.querySelector('.t77')){const box=d.querySelector('div[style*="flex:1"]')||d;
+      box.insertAdjacentHTML('afterbegin',`<span class="t77" style="display:inline-block;background:#37474f;color:#fff;border-radius:10px;font-size:11px;font-weight:bold;padding:1px 8px;margin-bottom:3px">Turno ${H(m.orden)}</span>`);}});
+    const padreT=conT.length?conT[0].d.parentNode:null;
+    if(padreT&&conT.every(x=>x.d.parentNode===padreT)){const refT=conT[conT.length-1].d.nextSibling;
+     conT.sort((a,b)=>(+a.m.orden||9999)-(+b.m.orden||9999)).forEach(x=>padreT.insertBefore(x.d,refT));
+     if(!caja.querySelector('.r77')){const ps=conT.map(x=>Math.max(0,Math.min(100,+x.m.avance||0)));const prom=Math.round(ps.reduce((a,b)=>a+b,0)/ps.length);
+      const enMarcha=ps.filter(p=>p>0).length;const quietas=conT.filter(x=>{const p=+x.m.avance||0;const f=x.m.afch?(Date.now()-Date.parse(String(x.m.afch).replace(' ','T')))/864e5:0;return p<100&&f>3;}).length;
+      conT[0].d.insertAdjacentHTML('beforebegin',`<div class="r77" style="background:#f1f8e9;border:1px solid #c5e1a5;border-radius:8px;padding:7px 9px;margin:2px 0 6px;font-size:12px;color:#333"><b>Avance de las ${ps.length} mejoras aprobadas: ${prom} %</b>
+       <div style="height:9px;background:#e0e0e0;border-radius:5px;overflow:hidden;margin:4px 0"><div style="height:100%;width:${prom}%;background:#2e7d32"></div></div>
+       ${enMarcha} en marcha · ${ps.length-enMarcha} en cola${quietas?` · <span style="color:#ef6c00">⚠ ${quietas} quieta(s) más de 3 días</span>`:''}. Van por <b>turno</b>: 1 es la que se programa primero (las que ya empezaron no se dejan a medias). Al terminar cada una pasa a «Aplicadas».</div>`);}}
     cards.forEach(d=>{const m=por[idDe(d)];if(!m||d.querySelector('.a77'))return;const p=Math.max(0,Math.min(100,+m.avance||0));
      const dias=m.afch?(Date.now()-Date.parse(String(m.afch).replace(' ','T')))/864e5:null;const quieta=p<100&&dias!=null&&dias>3;
      const col=p>=100?'#1565c0':(quieta?'#ef6c00':'#2e7d32');
