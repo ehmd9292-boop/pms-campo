@@ -5825,4 +5825,38 @@ async function ambExcelArmar(ExcelJS,plantilla,insp,asps){
  fijarContrato();
  try{if(typeof vcAplicar=='function')setTimeout(()=>{try{vcAplicar();}catch(e){}},0);}catch(e){}
 })();
+</script><script>
+// v437 (Erix, 27-nov-2026, 6:27 a. m.): «ayer solicité que tuviera la vista de cada contratista y usuario del sistema; ahora, cuando le doy a
+// los contratistas, solo aparece lo de Freyssinet». Causa: después de ver a Freyssinet (vista con solo sus módulos: el mapa se limpia y
+// queda solo el puente), el enlace «cambiar» de la banda naranja (vcCambiarContrato) cambiaba el nombre del contrato pero NO volvía a
+// dibujar el mapa: Castro o Lápiz se veían con el puente de Freyssinet y sin sus tramos. La prueba de vistas solo probaba entrar directo.
+//  · Arreglo: al «cambiar» de contratista (o al elegir otro en «Ver como contratista») la app guarda el contrato elegido, se vuelve a abrir
+//    sola y, cuando terminan de llegar los datos, entra a ese contrato por el MISMO camino que «Ver como contratista» (el que la prueba de
+//    vistas compara con el celular del contratista). Así el mapa, los botones y el punto de obra quedan como los ve ese contratista.
+//  · prueba_vistas_usuarios.py ahora también prueba pasar de un contratista a otro con «cambiar» (empezando por el de solo módulos).
+(function(){if(typeof DATA!=='undefined'&&DATA!=='Campo')return;
+ const K='v437_entrar';
+ function abrirComo(ctr,nombre){try{sessionStorage.setItem(K,ctr);sessionStorage.setItem('v437_aviso',nombre||ctr);}catch(e){}
+  try{localStorage.setItem('pms_contrato',ctr);}catch(e){}try{masCerrar();}catch(e){}
+  try{const d=document.createElement('div');d.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,74,97,.88);color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:bold;text-align:center;padding:20px';
+   d.textContent='👷 Abriendo la vista de '+(nombre||ctr)+'…';document.body.appendChild(d);}catch(e){}
+  setTimeout(()=>location.reload(),60);}
+ window.v437AbrirComo=abrirComo;
+ // «cambiar» de la banda naranja
+ try{const _vc=window.vcCambiarContrato||vcCambiarContrato;
+  const nc=function(i){let c=null;try{c=contratosLista()[i];}catch(e){}if(!c||!c.contrato)return _vc.apply(this,arguments);abrirComo(c.contrato,c.contratista);};
+  window.vcCambiarContrato=nc;try{vcCambiarContrato=nc;}catch(e){}}catch(e){}
+ // elegir otro contrato en «Ver como contratista» estando en una vista de solo módulos (mapa limpio): mismo camino
+ try{const _ve=window.vcEntrar||vcEntrar;
+  const ne=function(ctr){if(ctr&&document.body.classList.contains('vcsolo')){let n='';try{n=(contratosLista().find(x=>x.contrato==ctr)||{}).contratista||'';}catch(e){}abrirComo(ctr,n);return;}return _ve.apply(this,arguments);};
+  window.vcEntrar=ne;try{vcEntrar=ne;}catch(e){}}catch(e){}
+ // al volver a abrir: cuando ya llegaron los datos, entrar al contrato elegido (sin el mensaje de bienvenida de «Ver como contratista»)
+ let pend='';try{pend=sessionStorage.getItem(K)||'';sessionStorage.removeItem(K);}catch(e){}
+ let hecho=false;
+ function entrar(){if(hecho||!pend)return;hecho=true;const a=window.alert;try{window.alert=function(){};vcEntrar(pend);}catch(e){console.error('v437',e);}finally{window.alert=a;}
+  try{const n=sessionStorage.getItem('v437_aviso');sessionStorage.removeItem('v437_aviso');if(n)setTimeout(()=>{try{avisoCorto('👷 Ahora ve: '+n);}catch(e){}},800);}catch(e){}}
+ if(pend){try{const _id=initDatos;initDatos=function(){const r=_id.apply(this,arguments);setTimeout(entrar,1800);return r;};}catch(e){}
+  // por si los datos ya estaban: se intenta cuando la ficha tenga secciones
+  let n=0;const t=setInterval(()=>{n++;try{if(hecho||n>80){clearInterval(t);return;}if(typeof FICHA!=='undefined'&&Object.keys(FICHA||{}).length&&n>24){clearInterval(t);entrar();}}catch(e){}},500);}
+})();
 </script></body></html>
