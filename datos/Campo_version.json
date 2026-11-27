@@ -1,11 +1,11 @@
 {
-"generado": "2026-11-27 14:37",
+"generado": "2026-11-27 15:01",
 "secciones": 4788,
-"fotos": 448,
+"fotos": 449,
 "escenarios": [
 "Base BC"
 ],
-"huella": "f87ef59095",
+"huella": "8a63adaead",
 "fichas_partes": [
 "Campo_fichas_1.json",
 "Campo_fichas_2.json",
@@ -21,6 +21,5 @@
 "Campo_fichas_5.json.gz"
 ],
 "plan_gz": "Campo_plan.json.gz",
-"extra_gz": "Campo_extra.json.gz",
-"rapida": "2026-11-27 14:37"
+"extra_gz": "Campo_extra.json.gz"
 }
