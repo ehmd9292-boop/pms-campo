@@ -6186,4 +6186,269 @@ async function ambExcelArmar(ExcelJS,plantilla,insp,asps){
     const ref=v.querySelector('div[style*="overflow:auto"]')||v;const first=[...ref.children][1]||null;if(first)first.insertAdjacentHTML('beforebegin',h);else ref.insertAdjacentHTML('beforeend',h);});}catch(e){console.error('v443 plantilla',e);}}
  ['rfLista','rfModulo','reflectividadModulo'].forEach(fn=>{if(typeof window[fn]==='function'){const o=window[fn];window[fn]=function(){const r=o.apply(this,arguments);setTimeout(poner,30);setTimeout(poner,400);return r;};}});
 })();
+</script><script>
+// v444 (Erix, 27-nov-2026, 8:40 p. m.): «en el cargue, que cuando se cargue la foto del antes se le dé como un guardar previo para que no se
+//  pierda la información si sale de la aplicación o hace otra cosa, y se abra la actividad nuevamente y se cargue el después; con la foto ya
+//  con eso se cargue.»
+//  · En «Hice un arreglo», apenas se toma la foto de ANTES, el celular guarda un BORRADOR (foto, sitio, qué daño, qué hizo, cantidad).
+//    (También: los reportes guardados «pendientes de foto» ahora salen en el Inicio de la cuadrilla, como al inspector.)
+//    Se sigue guardando solo con cada cambio. Queda en el celular aunque cierre la app, se apague la pantalla o se quede sin batería.
+//  · En el Inicio de la cuadrilla sale «⏳ Arreglo empezado» (uno por sitio): al tocarlo se abre el arreglo con todo lo que ya tenía;
+//    solo falta la foto de DESPUÉS y «Guardar el arreglo». Así el antes y el después llegan en UN solo reporte.
+//  · Al guardar el arreglo, el borrador se borra solo. Si ya no sirve, se puede descartar. Los de más de 7 días se quitan solos.
+(function(){if(typeof DATA!=='undefined'&&DATA!=='Campo')return;
+ const H=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const DIAS=7, MAX=6;
+ // ------------------------------------------------ guardado en el celular (IndexedDB; si no hay, localStorage)
+ let _db=null;
+ function db(){if(_db)return _db;_db=new Promise(ok=>{try{const r=indexedDB.open('pms_borradores',1);r.onupgradeneeded=()=>{try{r.result.createObjectStore('b',{keyPath:'id'});}catch(e){}};
+   r.onsuccess=()=>ok(r.result);r.onerror=()=>ok(null);}catch(e){ok(null);}});return _db;}
+ const LS='pms_borradores_arreglo';
+ const lsLeer=()=>{try{return JSON.parse(localStorage.getItem(LS)||'[]');}catch(e){return [];}};
+ const lsPoner=L=>{try{localStorage.setItem(LS,JSON.stringify(L));return true;}catch(e){return false;}};
+ async function todos(){const d=await db();let L=[];
+   if(d){L=await new Promise(ok=>{try{const q=d.transaction('b').objectStore('b').getAll();q.onsuccess=()=>ok(q.result||[]);q.onerror=()=>ok([]);}catch(e){ok([]);}});}
+   const yo=localStorage.getItem('pms_usuario')||'';L=L.concat(lsLeer().filter(x=>!L.some(y=>y.id==x.id)));
+   const viejo=Date.now()-DIAS*864e5;for(const x of L.filter(x=>(x.t||0)<viejo))quitar(x.id);
+   return L.filter(x=>(x.t||0)>=viejo&&(!x.usuario||x.usuario==yo)).sort((a,b)=>b.t-a.t);}
+ async function poner(x){const d=await db();let ok=false;
+   if(d)ok=await new Promise(r=>{try{const tx=d.transaction('b','readwrite');tx.objectStore('b').put(x);tx.oncomplete=()=>r(true);tx.onerror=()=>r(false);}catch(e){r(false);}});
+   if(!ok){const L=lsLeer().filter(y=>y.id!=x.id);L.unshift(x);ok=lsPoner(L.slice(0,MAX));}
+   return ok;}
+ async function quitar(id){const d=await db();if(d){try{d.transaction('b','readwrite').objectStore('b').delete(id);}catch(e){}}lsPoner(lsLeer().filter(y=>y.id!=id));}
+ window.p88Todos=todos;window.p88Quitar=quitar;
+ // ------------------------------------------------ armar el borrador con lo que hay en el formulario
+ const T=()=>window.ROL_TIPO||new Map();
+ const val=id=>{const e=$(id);return e?e.value:'';};
+ function enArreglo(){try{return !!(typeof CU_ARR!=='undefined'&&CU_ARR&&$('cuact'));}catch(e){return false;}}
+ function foto(t){return (ROL_FOTOS||[]).find(x=>(T().get(x)||'despues')==t)||'';}
+ function armar(){const a=foto('antes');if(!a)return null;
+   if(!CU_ARR.borrador)CU_ARR.borrador='b'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+   return {id:CU_ARR.borrador,t:Date.now(),inicio:CU_ARR.inicio||(CU_ARR.inicio=Date.now()),usuario:localStorage.getItem('pms_usuario')||'',
+    g:(typeof REP!=='undefined'&&REP.g)||'pav',tipo:val('reptipo'),tr:val('rept'),cz:val('repcz'),car:val('repcar'),pr:val('reppr'),obs:val('repobs'),
+    defs:(typeof REP!=='undefined'&&REP.def)?[...REP.def]:[],act:val('cuact'),cant:val('cucant'),un:val('cuun'),
+    ll:(typeof ultimaPos!=='undefined'&&ultimaPos)?[ultimaPos[0],ultimaPos[1]]:null,antes:a,despues:foto('despues')};}
+ let _tm=null,_ultimo='';
+ function guardarYa(){try{if(!enArreglo())return;const x=armar();if(!x){if(CU_ARR&&CU_ARR.borrador){quitar(CU_ARR.borrador);CU_ARR.borrador=null;marca('');}return;}
+   const firma=JSON.stringify([x.tr,x.cz,x.car,x.pr,x.obs,x.defs,x.act,x.cant,x.un,x.tipo,x.antes.length,x.despues.length]);
+   if(firma==_ultimo)return;_ultimo=firma;
+   poner(x).then(ok=>marca(ok?'💾 Borrador guardado en el celular a las '+new Date().toTimeString().slice(0,5)+': si sale de la app, lo encuentra en el Inicio.':'⚠ No se pudo guardar el borrador (celular sin espacio).'));}catch(e){console.error('v444 borrador',e);}}
+ function guardarLuego(){clearTimeout(_tm);_tm=setTimeout(guardarYa,600);}
+ function marca(txt){try{let m=$('p88marca');const ref=[...document.querySelectorAll('#rolfotos')][0];
+   if(!m&&ref){ref.insertAdjacentHTML('afterend','<div id="p88marca" style="font-size:12px;color:#004A61;background:#e8f4f6;border-radius:6px;padding:5px 8px;margin:4px 0"></div>');m=$('p88marca');}
+   if(m){m.textContent=txt;m.style.display=txt?'block':'none';}}catch(e){}}
+ // cada vez que cambian las fotos (tomar o quitar): guardar
+ if(typeof window.rolFotosRender==='function'){const _rr=window.rolFotosRender;window.rolFotosRender=function(){const r=_rr.apply(this,arguments);try{if(enArreglo())guardarYa();}catch(e){}return r;};
+   try{rolFotosRender=window.rolFotosRender;}catch(e){}}
+ // cada vez que escribe o escoge algo en el formulario: guardar (si ya hay foto de antes)
+ document.addEventListener('input',e=>{if(enArreglo()&&e.target&&e.target.closest&&e.target.closest('#masbox'))guardarLuego();},true);
+ document.addEventListener('change',e=>{if(enArreglo()&&e.target&&e.target.closest&&e.target.closest('#masbox'))guardarLuego();},true);
+ document.addEventListener('click',e=>{if(enArreglo()&&e.target&&e.target.closest&&e.target.closest('#masbox .repg,#masbox #repdef span'))guardarLuego();},true);
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&enArreglo())guardarYa();});
+ window.addEventListener('pagehide',()=>{if(enArreglo())guardarYa();});
+ // al guardar el arreglo: se borra el borrador (el registro ya quedó en el celular para enviarse)
+ if(typeof setRegistros==='function'){const _sr=setRegistros;setRegistros=function(r){const id=(typeof CU_ARR!=='undefined'&&CU_ARR&&CU_ARR.borrador)||'';const out=_sr.apply(this,arguments);
+   try{if(id&&r&&r.length){const x=r[r.length-1];if(x&&x.tipo=='nota'&&x.elemento&&x.elemento.hecho){quitar(id);_ultimo='';}}}catch(e){}return out;};}
+ // ------------------------------------------------ seguir un arreglo empezado
+ window.p88Seguir=async function(id){const L=await todos();const x=L.find(y=>y.id==id);if(!x){alert('Ese borrador ya no está.');try{cuInicio();}catch(e){}return;}
+   CU_SIGUE=x;cuArreglo();};
+ window.p88Descartar=async function(id){const L=await todos();const x=L.find(y=>y.id==id);
+   if(!x)return;const b=$('p88d_'+id);if(b&&!b.dataset.ok){b.dataset.ok='1';b.textContent='¿Seguro? Toque otra vez para descartar';b.style.background='#c62828';b.style.color='#fff';setTimeout(()=>{try{b.dataset.ok='';b.textContent='Descartar';b.style.background='#fff';b.style.color='#c62828';}catch(e){}},4000);return;}
+   await quitar(id);try{cuInicio();}catch(e){}};
+ let CU_SIGUE=null;
+ function restaurar(x){try{if(!enArreglo())return false;
+   CU_ARR.borrador=x.id;CU_ARR.inicio=x.inicio||x.t;
+   if(typeof repGrupoSel==='function'&&x.g){repGrupoSel(x.g);try{cuActs();}catch(e){}}
+   const pon=(id,v)=>{const e=$(id);if(e&&v!=null&&v!=='')e.value=v;};
+   pon('reptipo',x.tipo);pon('rept',x.tr);pon('repcz',x.cz);pon('repcar',x.car);pon('reppr',x.pr);pon('repobs',x.obs);pon('cuact',x.act);pon('cucant',x.cant);pon('cuun',x.un);
+   try{REP.def=new Set(x.defs||[]);repPintarDef();}catch(e){}
+   ROL_FOTOS.length=0;T().clear();if(x.antes){ROL_FOTOS.push(x.antes);T().set(x.antes,'antes');}if(x.despues){ROL_FOTOS.push(x.despues);T().set(x.despues,'despues');}
+   _ultimo='';rolFotosRender();
+   const h=new Date(x.inicio||x.t).toTimeString().slice(0,5);
+   const v=masCaja();const c=v.querySelector('div[style*="overflow:auto"]')||v;
+   c.insertAdjacentHTML('afterbegin',`<div id="p88aviso" style="background:#fff3e0;border:2px solid #ef6c00;border-radius:10px;padding:9px 11px;margin:4px 0 8px;font-size:14px">⏳ <b>Arreglo empezado a las ${H(h)}</b>${x.pr?' · PR '+H(x.pr):''}${x.tr?' · T'+H(x.tr):''}<br>Ya tiene la foto de ANTES y lo que había escrito. ${x.despues?'Revise y toque «Guardar el arreglo».':'Ahora tome la <b>foto de DESPUÉS</b> y toque «Guardar el arreglo».'}</div>`);
+   return true;}catch(e){console.error('v444 restaurar',e);return false;}}
+ if(typeof window.cuArreglo==='function'){const _ca=window.cuArreglo;window.cuArreglo=function(){const sigue=CU_SIGUE;CU_SIGUE=null;const r=_ca.apply(this,arguments);
+   try{if(CU_ARR){CU_ARR.inicio=Date.now();_ultimo='';}}catch(e){}
+   if(sigue)setTimeout(()=>{if(!restaurar(sigue))setTimeout(()=>restaurar(sigue),500);},650);
+   return r;};
+   try{cuArreglo=window.cuArreglo;}catch(e){}}
+ // ------------------------------------------------ en el Inicio de la cuadrilla: los arreglos empezados
+ function tarjetas(L){const ahora=Date.now();const hace=t=>{const m=Math.round((ahora-t)/60000);return m<60?`hace ${m} min`:(m<1440?`hace ${Math.round(m/60)} h`:`hace ${Math.round(m/1440)} día(s)`);};
+   return `<div class="p88ini" style="margin:10px 0">${L.slice(0,MAX).map(x=>`<div style="background:#fff3e0;border:2px solid #ef6c00;border-radius:16px;padding:12px 14px;margin:8px 0;box-shadow:0 2px 6px rgba(0,0,0,.12)">
+     <div style="display:flex;gap:10px;align-items:center"><img src="${x.antes}" style="width:70px;height:56px;object-fit:cover;border-radius:8px;flex:none">
+      <div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:bold;color:#e65100">⏳ Arreglo empezado</div>
+       <div style="font-size:13px;color:#333">${x.tr?'T'+H(x.tr)+' · ':''}${x.cz?H(x.cz)+' · ':''}${x.pr?'PR '+H(x.pr):'(sin PR)'} · ${hace(x.inicio||x.t)}</div>
+       <div style="font-size:12px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${H(x.act||x.obs||'')}</div></div></div>
+     <div style="display:flex;gap:6px;margin-top:8px"><button type="button" onclick="p88Seguir('${H(x.id)}')" style="flex:2;border:0;border-radius:10px;padding:12px;background:#ef6c00;color:#fff;font-weight:bold;font-size:15px">📷 Seguir: foto de DESPUÉS</button>
+      <button type="button" id="p88d_${H(x.id)}" onclick="p88Descartar('${H(x.id)}')" style="flex:1;border:1px solid #c62828;border-radius:10px;padding:12px;background:#fff;color:#c62828;font-size:13px">Descartar</button></div></div>`).join('')}</div>`;}
+ async function ponerEnInicio(){try{if(typeof cuOn==='function'&&!cuOn())return;const L=await todos();const v=masCaja();if(!v||v.style.display=='none')return;
+   const b=v.querySelector('b');if(!b||!/Inicio/.test(b.textContent))return;v.querySelectorAll('.p88ini,.p88sf').forEach(e=>e.remove());
+   const cab=[...v.querySelectorAll('div')].find(d=>/background:#004d61/.test(d.getAttribute('style')||'')&&/border-radius:12px/.test(d.getAttribute('style')||''));if(!cab)return;
+   // v444 (revisión con agentes): los reportes guardados «pendientes de foto» no salían en el Inicio de la cuadrilla (solo en el del inspector)
+   let sf=0;try{sf=(JSON.parse(localStorage.getItem('pms_sin_foto')||'[]')||[]).length;}catch(e){}
+   if(sf&&typeof c73SinFotoLista==='function')cab.insertAdjacentHTML('afterend',`<div class="p88sf" onclick="c73SinFotoLista()" style="display:flex;align-items:center;gap:12px;background:#c62828;color:#fff;border-radius:16px;padding:14px 16px;margin:10px 0;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.15)"><span style="font-size:36px">📷</span><div><div style="font-size:17px;font-weight:bold">${sf} reporte(s) sin foto</div><div style="font-size:13px;opacity:.95">no se han enviado: toque para tomarles la foto</div></div></div>`);
+   if(L.length)cab.insertAdjacentHTML('afterend',tarjetas(L));}catch(e){console.error('v444 inicio',e);}}
+ if(typeof window.cuInicio==='function'){const _ci=window.cuInicio;window.cuInicio=function(){const r=_ci.apply(this,arguments);setTimeout(ponerEnInicio,30);return r;};
+   try{cuInicio=window.cuInicio;}catch(e){}}
+})();
+</script><script>
+// v444 (Erix, 27-nov-2026, 8:40 p. m.), 2.ª parte de la mejora de Darwin Garay: «que el cargue de la información se haga similar al formato
+//  Excel, que se vaya viendo todo el cargue realizado» y «la plantilla de la reflectividad se debe cargar en la misma aplicación y luego se puede
+//  descargar el Excel con la información cargada en el aplicativo».
+//  · 🔦 Reflectividad → «📋 Cargar un km como planilla»: la misma hoja de la plantilla BTS (trayecto, calzada y kilómetro), una fila cada 20 m y
+//    tres columnas (borde derecho y eje blancos, borde izquierdo amarillo). Cada casilla se pone verde o roja contra el mínimo (150 / 100) y
+//    abajo va el resumen de la hoja (% que cumple, promedio, mínima) como en el Excel. Lo escrito se guarda solo en el celular (si sale de la
+//    app no se pierde). Al guardar salen 3 mediciones (una por línea, con todas sus lecturas y su PR) que siguen el camino de siempre:
+//    contratista → coordinador junior → PC.
+//  · «⬇ Excel BTS con lo cargado»: llena la plantilla BTS del trayecto con lo que tiene la app (planillas: cada lectura en la fila de su PR;
+//    mediciones de un punto: su promedio en la fila del PR más cercano) y la descarga. Las fórmulas, colores y el resumen son los de la plantilla.
+(function(){if(typeof DATA!=='undefined'&&DATA!=='Campo')return;if(typeof window.rfDatos!=='function')return;
+ const H=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const LIN=[['Línea de borde derecho','Blanco','Borde der.'],['Línea de eje (central)','Blanco','Eje'],['Línea de borde izquierdo','Amarillo','Borde izq.']];
+ const KEY='pms_rf_planilla';
+ const usr=()=>localStorage.getItem('pms_usuario')||'';
+ const num=v=>{const x=parseFloat(String(v==null?'':v).replace(',','.'));return isFinite(x)&&x>=0?x:null;};
+ const f0=v=>{try{return fmt(v,0);}catch(e){return String(Math.round(v));}};
+ let IDX=null;
+ const indice=()=>IDX?Promise.resolve(IDX):fetch('datos/plantillas/plantillas.json?x='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{IDX=j||{reflectividad:[]};return IDX;}).catch(()=>{IDX={reflectividad:[]};return IDX;});
+ window.p89Indice=indice;
+ const minDe=k=>{const m=(rfDatos().min||{});return k<2?(+m.horizontal_blanco||150):(+m.horizontal_amarillo||100);};
+ // ------------------------------------------------ borrador (lo escrito no se pierde)
+ const leerB=()=>{try{const b=JSON.parse(localStorage.getItem(KEY)||'null');return b&&b.u==usr()?b:null;}catch(e){return null;}};
+ const ponerB=b=>{try{localStorage.setItem(KEY,JSON.stringify(b));return true;}catch(e){return false;}};
+ let PL=null,_tm=null;
+ function guardarB(){clearTimeout(_tm);_tm=setTimeout(()=>{if(!PL)return;leerCab();PL.t_=Date.now();const ok=ponerB(PL);const z=$('p89est');if(z)z.textContent=ok?'💾 Guardado en el celular a las '+new Date().toTimeString().slice(0,5):'⚠ No se pudo guardar en el celular';},350);}
+ function leerCab(){if(!PL)return;const g=id=>($(id)||{}).value||'';PL.ci=g('p89cst');PL.car=g('p89car');PL.cond=g('p89cond');PL.obs=g('p89obs');}
+ // ------------------------------------------------ pantalla
+ window.rfPlanilla=async function(){const R=rfDatos();const I=await indice();const L=(I.reflectividad||[]).filter(x=>x.t&&x.h&&x.h.length);
+   if(!L.length){alert('Todavía no están las plantillas por trayecto en la app. Pida que se publique la versión nueva.');return;}
+   const b=leerB();PL=b||{u:usr(),id:'pl'+Date.now().toString(36),t:'',cz:'',h:'',v:{},ci:'',car:'',cond:'seca',obs:''};
+   const cst=R.contratistas.map((c,i)=>`<option value="${i}">${H(c.contratista)}${c.contrato?' · '+H(c.contrato):''}</option>`).join('');
+   const sel=(id,ops,on)=>`<select id="${id}" ${on?`onchange="${on}"`:''} style="width:100%;padding:8px;margin:2px 0 6px;font-size:14px">${ops}</select>`;
+   masPanel('📋 Reflectividad · planilla de un km',`${b&&Object.keys(b.v||{}).length?`<div style="background:#fff3e0;border-left:5px solid #ef6c00;border-radius:8px;padding:8px 10px;margin:0 0 8px;font-size:13px">⏳ Siguió la planilla que tenía empezada. <span onclick="p89Nueva()" style="color:#1565c0;text-decoration:underline;cursor:pointer">Empezar una en blanco</span></div>`:''}
+    <div style="font-size:12px;color:#555;margin-bottom:6px">Es la misma hoja de la plantilla BTS: una fila cada 20 m. Escriba la lectura de cada línea; la casilla se pone <b style="color:#2e7d32">verde</b> si cumple y <b style="color:#c62828">roja</b> si no. Deje vacío lo que no midió.</div>
+    ${typeof rfCalCaja==='function'?rfCalCaja():''}
+    <b style="font-size:13px">¿Para qué contratista va?</b>${sel('p89cst',cst||'<option value="">(no hay contratistas de señalización activos)</option>','p89Cab()')}
+    <div style="display:flex;gap:6px"><div style="flex:1">Trayecto${sel('p89t','<option value="">—</option>'+L.map(x=>`<option value="${H(x.t)}">${H(x.t)}</option>`).join(''),'p89Tray()')}</div>
+     <div style="flex:1">Calzada${sel('p89cz','<option value="">—</option>','p89Calz()')}</div></div>
+    <div style="display:flex;gap:6px"><div style="flex:2">Kilómetro (hoja)${sel('p89h','<option value="">—</option>','p89Hoja()')}</div><div style="flex:1">Carril${sel('p89car','<option value="">—</option><option>Externo</option><option>Interno</option>','p89Cab()')}</div></div>
+    <div style="display:flex;gap:6px"><div style="flex:1">Superficie${sel('p89cond','<option>seca</option><option>húmeda</option>','p89Cab()')}</div><div style="flex:2">Observación<input id="p89obs" oninput="p89Cab()" style="width:100%;padding:8px;margin:2px 0 6px;box-sizing:border-box"></div></div>
+    <div id="p89grid"></div><div id="p89est" style="font-size:11px;color:#004A61;margin:4px 0"></div>
+    <button type="button" onclick="p89Guardar()" style="width:100%;margin-top:8px;border:0;border-radius:8px;padding:13px;background:#2e7d32;color:#fff;font-size:15px;font-weight:bold">💾 Guardar la planilla (una medición por línea)</button>
+    <button type="button" onclick="rfMedir()" style="width:100%;margin-top:6px;border:0;border-radius:8px;padding:11px;background:#eceff1;font-size:14px">◀ Volver a medir un punto</button>`);
+   const pon=(id,v)=>{const e=$(id);if(e&&v!=null&&v!=='')e.value=v;};
+   pon('p89cst',PL.ci);pon('p89car',PL.car);pon('p89cond',PL.cond);pon('p89obs',PL.obs);
+   if(PL.t){pon('p89t',PL.t);p89Tray(true);pon('p89cz',PL.cz);p89Calz(true);pon('p89h',PL.h);}
+   p89Hoja(true);};
+ window.p89Nueva=function(){try{localStorage.removeItem(KEY);}catch(e){}PL=null;rfPlanilla();};
+ window.p89Cab=function(){guardarB();};
+ const entrada=()=>(IDX&&IDX.reflectividad||[]).find(x=>x.t==($('p89t')||{}).value);
+ window.p89Tray=function(quieto){const e=entrada();const cz=[...new Set((e&&e.h||[]).map(h=>h[0]))];const s=$('p89cz');
+   if(s)s.innerHTML='<option value="">—</option>'+cz.map(c=>`<option>${H(c)}</option>`).join('');if(cz.length==1&&s)s.value=cz[0];
+   if(!quieto){PL.t=($('p89t')||{}).value;PL.cz=s?s.value:'';PL.h='';PL.v={};}p89Calz(quieto);};
+ window.p89Calz=function(quieto){const e=entrada();const cz=($('p89cz')||{}).value;const s=$('p89h');
+   const hs=(e&&e.h||[]).filter(h=>h[0]==cz);if(s)s.innerHTML='<option value="">—</option>'+hs.map(h=>`<option value="${H(h[3])}">PR ${H(prTxt(h[1]))} a ${H(prTxt(h[2]))}</option>`).join('');
+   if(!quieto){PL.cz=cz;PL.h='';PL.v={};p89Hoja();}};
+ const hojaSel=()=>{const e=entrada();const n=($('p89h')||{}).value;return (e&&e.h||[]).find(h=>h[3]==n&&h[0]==($('p89cz')||{}).value)||null;};
+ const estaciones=h=>{const cada=(IDX&&IDX.cada_m)||20;const n=Math.max(1,Math.min(50,Math.round((h[2]-h[1])/cada)));return Array.from({length:n},(_,i)=>h[1]+cada*i);};
+ window.p89Hoja=function(quieto){const h=hojaSel();const z=$('p89grid');if(!z)return;
+   if(!quieto&&PL&&PL.h!=(h?h[3]:'')){PL.h=h?h[3]:'';PL.v={};}
+   if(!h){z.innerHTML='<div style="font-size:12px;color:#777;padding:8px 0">Escoja trayecto, calzada y kilómetro para ver la planilla.</div>';guardarB();return;}
+   PL.t=($('p89t')||{}).value;PL.cz=h[0];PL.h=h[3];PL.d0=h[1];PL.d1=h[2];
+   const E=estaciones(h);const th='padding:5px 2px;background:#004A61;color:#fff;font-size:11px;position:sticky;top:0';
+   z.innerHTML=`<div style="font-size:12px;margin:4px 0"><b>Hoja ${H(h[3])}</b> · ${E.length} filas · mínimo blanco ${minDe(0)} y amarillo ${minDe(2)} (mcd/m²/lx)</div>
+    <div style="max-height:52vh;overflow:auto;border:1px solid #92BABD;border-radius:8px"><table style="border-collapse:collapse;width:100%;font-size:13px">
+    <thead><tr><th style="${th}">PR</th>${LIN.map((l,k)=>`<th style="${th}">${l[2]}<br><span style="font-weight:normal">${l[1].toLowerCase()} · mín ${minDe(k)}</span></th>`).join('')}</tr></thead>
+    <tbody>${E.map((pr,i)=>`<tr style="background:${i%2?'#F6F4E6':'#fff'}"><td style="padding:2px 4px;font-weight:bold;color:#004A61;white-space:nowrap">${H(prTxt(pr))}</td>${LIN.map((l,k)=>{const v=(PL.v[i]||[])[k];
+      return `<td style="padding:2px"><input class="p89c" data-i="${i}" data-k="${k}" inputmode="decimal" enterkeyhint="next" value="${v==null?'':H(v)}" oninput="p89Celda(this)" onkeydown="p89Tecla(event,this)" style="width:100%;box-sizing:border-box;padding:7px 2px;text-align:center;font-size:15px;border:1px solid #ccc;border-radius:4px"></td>`;}).join('')}</tr>`).join('')}</tbody>
+    <tfoot id="p89res"></tfoot></table></div>`;
+   z.querySelectorAll('.p89c').forEach(pintar);resumen();guardarB();};
+ function pintar(el){const v=num(el.value);const k=+el.dataset.k;el.style.background=v==null?'#fff':(v>=minDe(k)?'#E3F1D0':'#F8D7DA');el.style.color=v==null?'#222':(v>=minDe(k)?'#2e7d32':'#b71c1c');}
+ window.p89Celda=function(el){const i=+el.dataset.i,k=+el.dataset.k;const v=num(el.value);PL.v[i]=PL.v[i]||[null,null,null];PL.v[i][k]=el.value.trim()===''?null:(v==null?el.value.trim():v);pintar(el);resumen();guardarB();};
+ window.p89Tecla=function(ev,el){if(ev.key!=='Enter')return;ev.preventDefault();const n=document.querySelector(`.p89c[data-i="${+el.dataset.i+1}"][data-k="${el.dataset.k}"]`);if(n){n.focus();n.select&&n.select();}else el.blur();};
+ function datosLinea(k){const h=hojaSel();if(!h)return {v:[],pr:[]};const E=estaciones(h);const v=[],pr=[];E.forEach((p,i)=>{const x=num((PL.v[i]||[])[k]);if(x!=null){v.push(x);pr.push(p);}});return {v,pr};}
+ function resumen(){const z=$('p89res');if(!z)return;const td='padding:4px 2px;text-align:center;font-size:11px;background:#e8f4f6;border-top:2px solid #004A61';
+   const S=LIN.map((l,k)=>{const {v}=datosLinea(k);if(!v.length)return null;const ok=v.filter(x=>x>=minDe(k)).length;return {n:v.length,pct:100*ok/v.length,prom:v.reduce((s,x)=>s+x,0)/v.length,mn:Math.min(...v)};});
+   const fila=(t,f)=>`<tr><td style="${td};font-weight:bold;text-align:left">${t}</td>${S.map(s=>`<td style="${td}">${s?f(s):'—'}</td>`).join('')}</tr>`;
+   z.innerHTML=fila('Lecturas',s=>s.n)+fila('% cumple',s=>`<b style="color:${s.pct>=85?'#2e7d32':'#c62828'}">${f0(s.pct)} %</b>`)+fila('Promedio',s=>f0(s.prom))+fila('Mínima',s=>f0(s.mn));}
+ // ------------------------------------------------ guardar: una medición por línea (con todas sus lecturas y su PR)
+ window.p89Guardar=function(){if(!PL){return;}leerCab();const R=rfDatos();const c=R.contratistas[+(($('p89cst')||{}).value)];const h=hojaSel();
+   if(!c){alert('Escoja el contratista al que va la planilla.');return;}
+   if(!h){alert('Escoja trayecto, calzada y kilómetro.');return;}
+   const malas=[...document.querySelectorAll('.p89c')].filter(e=>e.value.trim()!==''&&num(e.value)==null);if(malas.length){malas[0].focus();alert('Hay '+malas.length+' casilla(s) que no son un número. Corríjalas o déjelas vacías.');return;}
+   const cal=typeof rfCalHoy==='function'?rfCalHoy():null;if(!cal){alert('Primero calibre el equipo (una vez al día): toque «🔧 Calibrar el equipo».');try{rfCalibrar();}catch(e){}return;}
+   const lineas=LIN.map((l,k)=>[l,k,datosLinea(k)]).filter(x=>x[2].v.length);if(!lineas.length){alert('La planilla está vacía: escriba al menos una lectura.');return;}
+   const grupo='g'+Date.now().toString(36);const mias=locGet('pms_rf_mias');const pf=h[2];const prt=prTxt(h[1])+' a '+prTxt(h[2]);let n=0;
+   lineas.forEach(([l,k,d])=>{const id='rf'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)+k;const p=d.v.reduce((s,x)=>s+x,0)/d.v.length;
+     const obs=('Planilla cada 20 m · hoja '+h[3]+(PL.obs?' · '+PL.obs:'')).slice(0,480);
+     const m={id:id,id_med:id,fecha_med:ahoraLocal(),contrato:c.contrato||'',contratista:c.contratista||'',trayecto:PL.t,calzada:h[0],carril:PL.car||'',pr:h[1],pr_fin:pf,pr_txt:prt,codigo:'',lat:null,lon:null,
+      elemento:l[0],color:l[1],unidad:'mcd/lx/m²',lecturas:d.v,lecturas_pr:d.pr,promedio:Math.round(p*10)/10,condicion:PL.cond||'seca',equipo:cal.equipo||'',calibracion_id:cal.id,grupo:grupo,planilla:PL.id,hoja:h[3],observacion:obs,fotos:[],remide_de:''};
+     regSistema('reflectividad',m);
+     mias[id]={id:id,f:m.fecha_med,ins:usr(),ctr:m.contrato,cst:m.contratista,t:PL.t,cz:h[0],car:m.carril,pr:h[1],prt:prt,el:l[0],col:l[1],un:m.unidad,prom:m.promedio,mn:Math.min(...d.v),n:d.v.length,cond:m.condicion,obs:obs,est:'en el celular',_t:ahoraLocal(),lec:d.v,lpr:d.pr,pf:pf,pl:PL.id,hj:h[3]};n++;});
+   locSet('pms_rf_mias',mias);try{localStorage.removeItem(KEY);}catch(e){}const t=PL.t;PL=null;
+   alert(`Planilla guardada: ${n} medición(es), una por línea, con todas sus lecturas. Se envían con «Enviar a la nube»; el PC se las pasa a ${c.contratista||'el contratista'} para que las acepte.`);
+   try{rfLista();}catch(e){}};
+ // ------------------------------------------------ Excel BTS con lo cargado (la plantilla del trayecto, llena)
+ // se llena el mismo .xlsx de la plantilla por dentro (sus hojas son XML): quedan intactos el logo, los colores, las fórmulas y las validaciones
+ let _zip=null;
+ function jszip(){if(window.JSZip)return Promise.resolve(window.JSZip);if(_zip)return _zip;
+   const u=['https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js','https://unpkg.com/jszip@3.10.1/dist/jszip.min.js'];
+   _zip=new Promise((ok,mal)=>{let i=0;const una=()=>{if(i>=u.length){_zip=null;mal(new Error('no se pudo cargar el armador de Excel (¿sin internet?)'));return;}const s=document.createElement('script');s.src=u[i++];s.onload=()=>window.JSZip?ok(window.JSZip):una();s.onerror=una;document.head.appendChild(s);};una();});return _zip;}
+ const xesc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+ function celda(xml,ref,val){const re=new RegExp('<c r="'+ref+'"(?=[ >/])([^>]*?)(/>|>[\\s\\S]*?</c>)');const m=re.exec(xml);if(!m)return xml;
+   const at=m[1].replace(/\s+t="[^"]*"/,'').replace(/\/$/,'');
+   const nuevo=typeof val==='number'?`<c r="${ref}"${at}><v>${val}</v></c>`:`<c r="${ref}"${at} t="inlineStr"><is><t xml:space="preserve">${xesc(val)}</t></is></c>`;
+   return xml.slice(0,m.index)+nuevo+xml.slice(m.index+m[0].length);}
+ async function hojasXml(z){const wb=await z.file('xl/workbook.xml').async('string');const rel=await z.file('xl/_rels/workbook.xml.rels').async('string');const out={};
+   const rid={};(rel.match(/<Relationship\b[^>]*>/g)||[]).forEach(r=>{const id=(/\bId="([^"]+)"/.exec(r)||[])[1];const tg=(/\bTarget="([^"]+)"/.exec(r)||[])[1];if(id&&tg)rid[id]=tg.replace(/^\//,'').replace(/^(?!xl\/)/,'xl/');});
+   (wb.match(/<sheet\b[^>]*>/g)||[]).forEach(s=>{const n=(/\bname="([^"]+)"/.exec(s)||[])[1];const id=(/r:id="([^"]+)"/.exec(s)||[])[1];if(n&&rid[id])out[n.replace(/&amp;/g,'&')]=rid[id];});
+   return {out,wb};}
+ const colDe=el=>/borde derecho/i.test(el)?0:(/eje/i.test(el)?1:(/borde izquierdo/i.test(el)?2:-1));
+ window.p89Llenar=function(med,e,I){// → {hojas:{nombre:{i:[v0,v1,v2]}}, obs:{nombre:{i:txt}}, n}
+   const out={};const obs={};let n=0;const cada=I.cada_m||20;
+   const hojaDe=(cz,pr)=>(e.h||[]).find(h=>h[0]==cz&&pr>=h[1]&&pr<h[2])||(e.h||[]).filter(h=>h[0]==cz&&pr==h[2]).slice(-1)[0];
+   const poner=(h,pr,k,v,nota)=>{const E=estaciones(h);let i=Math.round((pr-h[1])/cada);i=Math.max(0,Math.min(E.length-1,i));const T=out[h[3]]=out[h[3]]||{};T[i]=T[i]||[null,null,null];
+     if(T[i][k]!=null)return;T[i][k]=v;n++;if(nota){const O=obs[h[3]]=obs[h[3]]||{};O[i]=(O[i]?O[i]+' · ':'')+nota;}};
+   med.slice().sort((x,y)=>String(y.f||'').localeCompare(String(x.f||''))).filter(m=>String(m.t)==String(e.t)&&m.est!='remedida'&&colDe(m.el)>=0).forEach(m=>{const k=colDe(m.el);
+     if(Array.isArray(m.lec)&&Array.isArray(m.lpr)&&m.lec.length==m.lpr.length&&m.lec.length){m.lec.forEach((v,j)=>{const h=hojaDe(m.cz,+m.lpr[j]);if(h)poner(h,+m.lpr[j],k,+v,'');});}
+     else if(m.prom!=null&&m.pr!=null){const h=hojaDe(m.cz,+m.pr);if(h)poner(h,+m.pr,k,Math.round(+m.prom),`${LIN[k][2]}: promedio de ${m.n||'?'} lectura(s) del ${String(m.f||'').slice(0,10)}`);}});
+   return {hojas:out,obs:obs,n:n};};
+ window.p89Excel=async function(t){const I=await indice();const e=(I.reflectividad||[]).find(x=>x.t==t);if(!e){alert('No está la plantilla de ese trayecto.');return;}
+   const b=$('p89xb');if(b){b.disabled=true;b.textContent='Armando el Excel…';}
+   try{const R=rfDatos();const lleno=p89Llenar(R.med||[],e,I);if(!lleno.n){alert('Todavía no hay reflectividad de las líneas (borde derecho, eje, borde izquierdo) cargada en el trayecto '+t+'.');return;}
+    const Z=await jszip();const buf=await fetch('datos/plantillas/'+encodeURIComponent(e.a),{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('no se pudo bajar la plantilla');return r.arrayBuffer();});
+    const z=await Z.loadAsync(buf);const {out:HX,wb}=await hojasXml(z);const f1=I.fila1||10;const C=I.col||['B','D','F'];let hechas=0;
+    for(const [nm,T] of Object.entries(lleno.hojas)){const p=HX[nm];if(!p||!z.file(p))continue;let x=await z.file(p).async('string');
+      Object.entries(T).forEach(([i,vs])=>vs.forEach((v,k)=>{if(v!=null)x=celda(x,C[k]+(f1+(+i)),+v);}));
+      Object.entries(lleno.obs[nm]||{}).forEach(([i,txt])=>{x=celda(x,'H'+(f1+(+i)),txt);});z.file(p,x);hechas++;}
+    const pd=HX['Datos'];if(pd&&z.file(pd)){const d=I.datos||{};const cal=typeof rfCalHoy==='function'?rfCalHoy():null;let x=await z.file(pd).async('string');
+      if(d.fecha)x=celda(x,d.fecha,'Lo cargado en la app hasta el '+new Date().toLocaleDateString('es-CO'));if(d.equipo&&cal&&cal.equipo)x=celda(x,d.equipo,cal.equipo);
+      if(d.contratista)x=celda(x,d.contratista,'Descargado de la app por '+usr());z.file(pd,x);}
+    z.file('xl/workbook.xml',/fullCalcOnLoad/.test(wb)?wb:wb.replace(/<calcPr\b/,'<calcPr fullCalcOnLoad="1"'));
+    const out=await z.generateAsync({type:'uint8array',compression:'DEFLATE'});const blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Reflectividad_BTS_T${String(t).replace(/[^\w]+/g,'_')}_lo_cargado_${new Date().toISOString().slice(0,10)}.xlsx`;document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);window.P89_ULTIMO={hojas:Object.keys(lleno.hojas).length,n:lleno.n,bytes:out.byteLength||out.length};
+    avisoCorto&&avisoCorto(`✔ Excel BTS listo: ${lleno.n} lectura(s) en ${Object.keys(lleno.hojas).length} hoja(s).`);}
+   catch(er){console.error('v444 excel',er);alert('No se pudo armar el Excel: '+(er.message||er)+'. Si no hay internet, use «📊 Descargar Excel» (sale en .csv).');}
+   finally{const b2=$('p89xb');if(b2){b2.disabled=false;b2.textContent='⬇ Excel BTS con lo cargado';}}};
+ // ------------------------------------------------ botones en las pantallas de reflectividad
+ const puedeMedir=()=>{try{const r=(typeof rolActual==='function'?rolActual():'');return !(typeof vcActiva==='function'&&vcActiva())&&r!='contratista'&&r!='campo';}catch(e){return true;}};
+ function cajaPl(){return `<div class="p89" style="background:#fff;border:1px solid #92BABD;border-left:5px solid #004A61;border-radius:10px;padding:8px 10px;margin:6px 0 10px">
+   <button type="button" onclick="rfPlanilla()" style="width:100%;border:0;border-radius:8px;padding:12px;background:#004A61;color:#fff;font-weight:bold;font-size:15px">📋 Cargar un km como planilla (cada 20 m)</button>
+   <div style="font-size:11px;color:#555;margin-top:4px">Como la hoja del Excel BTS: las tres líneas, cumple en verde o rojo y el resumen. Lo escrito se guarda en el celular.</div></div>`;}
+ function cajaXl(){const L=(IDX&&IDX.reflectividad||[]).filter(x=>x.t);if(!L.length)return '';const ts=[...new Set((rfDatos().med||[]).map(m=>String(m.t)))];
+   return `<div class="p89x" style="background:#fff;border:1px solid #92BABD;border-left:5px solid #C0C233;border-radius:10px;padding:8px 10px;margin:6px 0 10px">
+   <div style="font-weight:bold;color:#004A61;font-size:14px">⬇ Excel BTS con lo cargado</div><div style="font-size:12px;color:#555;margin:2px 0 6px">La plantilla BTS del trayecto, llena con la reflectividad que tiene la app (cada lectura en su fila de 20 m).</div>
+   <div style="display:flex;gap:6px;flex-wrap:wrap"><select id="p89xt" style="flex:1;min-width:150px;font-size:14px;padding:8px">${L.map(x=>`<option value="${H(x.t)}"${ts.includes(String(x.t))?'':' style="color:#999"'}>T${H(x.t)} · ${H(x.n)}</option>`).join('')}</select>
+   <button type="button" id="p89xb" onclick="p89Excel(($('p89xt')||{}).value)" style="border:0;border-radius:8px;padding:10px 12px;background:#C0C233;color:#004A61;font-weight:bold">⬇ Excel BTS con lo cargado</button></div></div>`;}
+ function poner(){try{const v=masCaja();if(!v||v.style.display=='none')return;const t=(v.querySelector('b')||{}).textContent||'';
+   const c=v.querySelector('div[style*="overflow:auto"]')||v;
+   if(/Medir reflectividad/.test(t)&&!v.querySelector('.p89')&&puedeMedir()){const f=c.children[1];if(f)f.insertAdjacentHTML('afterend',cajaPl());}
+   if(/Reflectividad/i.test(t)&&!/Medir|planilla|Calibraci|tabla/i.test(t)&&!v.querySelector('.p89x')&&puedeMedir()){indice().then(()=>{if(v.querySelector('.p89x'))return;const p=v.querySelector('.p87');const h=cajaXl();if(!h)return;
+     if(p)p.insertAdjacentHTML('afterend',h);else{const f=c.children[1];if(f)f.insertAdjacentHTML('afterend',h);}
+     if(!v.querySelector('.p89')){const x=v.querySelector('.p89x');if(x)x.insertAdjacentHTML('beforebegin',cajaPl());}});}}catch(e){console.error('v444 botones',e);}}
+ ['rfLista','rfModulo','reflectividadModulo','rfMedir'].forEach(fn=>{if(typeof window[fn]==='function'){const o=window[fn];window[fn]=function(){const r=o.apply(this,arguments);setTimeout(poner,40);setTimeout(poner,450);return r;};}});
+ indice();
+})();
 </script></body></html>

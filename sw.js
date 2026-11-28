@@ -3,9 +3,11 @@
 self.addEventListener('notificationclick',e=>{e.notification.close();e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(cs=>{for(const c of cs){if('focus' in c)return c.focus();}return self.clients.openWindow('./Campo.html');}));});      // v257: tocar el aviso abre la app
 const CACHE='pms-campo-v4'; const BASE=['./Campo.html','./manifest.json','./icono.svg','https://unpkg.com/leaflet@1.9.4/dist/leaflet.js','https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>Promise.allSettled(BASE.map(u=>c.add(u)))).then(()=>self.skipWaiting()));});
-self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
+// v444: al publicar no se borra 'pms-campo-v3' (los mapas y fotos que se bajaron con «⬇ Sin conexión»)
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE&&k!=='pms-campo-v3').map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.pathname.includes('/api/')||/open-meteo\.com$/.test(u.hostname))return;      // v316: el clima en tiempo real va siempre a la red
- const esTile=/tile|arcgisonline|openstreetmap/.test(u.hostname+u.pathname); const esDato=/\/datos\/.+\.(json(\.gz)?|pdf)$/.test(u.pathname);   // v197e: también datos/video/…/v.json e indice.json (antes la tablet se quedaba con la copia vieja) const esPag=u.pathname.endsWith('Campo.html')||u.pathname.endsWith('/');
+ const esTile=/tile|arcgisonline|openstreetmap/.test(u.hostname+u.pathname); const esDato=/\/datos\/.+\.(json(\.gz)?|pdf)$/.test(u.pathname);   // v197e: también datos/video/…/v.json e indice.json (antes la tablet se quedaba con la copia vieja)
+ const esPag=u.pathname.endsWith('Campo.html')||u.pathname.endsWith('/');      // v444: esta línea había quedado dentro del comentario de arriba y la app no abría sin señal
  if(esPag||esDato){   // red primero (datos nuevos), si no hay red la copia guardada
   const key=esPag?'./Campo.html':e.request;e.respondWith(fetch(e.request,{cache:'no-store'}).then(r=>{if(r.ok){const cp=r.clone();caches.open(CACHE).then(c=>c.put(key,cp));}return r;}).catch(()=>caches.match(key)));return;}
  e.respondWith(caches.match(e.request).then(hit=>hit||fetch(e.request).then(r=>{if(r.ok||r.type==='opaque'){const cp=r.clone();caches.open(CACHE).then(c=>{if(!esTile)c.put(e.request,cp);else c.keys().then(ks=>{if(ks.length<60000)c.put(e.request,cp);});});}return r;}).catch(()=>hit)));});
