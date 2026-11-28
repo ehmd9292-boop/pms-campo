@@ -6451,4 +6451,569 @@ async function ambExcelArmar(ExcelJS,plantilla,insp,asps){
  ['rfLista','rfModulo','reflectividadModulo','rfMedir'].forEach(fn=>{if(typeof window[fn]==='function'){const o=window[fn];window[fn]=function(){const r=o.apply(this,arguments);setTimeout(poner,40);setTimeout(poner,450);return r;};}});
  indice();
 })();
+</script><script>
+// v445 (Erix, aprobado 27-nov-2026): MEJORAS DE CAMPO que salieron de la revisión de la app del celular con la cuadrilla, el inspector y el
+//  coordinador junior. Todo va en esta parte; no se reescribe nada de la app: se «envuelven» las funciones que ya existen (se guarda la
+//  original y se llama). Qué hace cada bloque:
+//   (A) «¿Qué actividad se hizo?» y la unidad ya NO vienen marcadas («Parcheo (mezcla en caliente)» y «un»): arrancan en «— Escoja —» y hay
+//       que escoger. La unidad se pone sola según la actividad (parcheo y bacheo: m²; sello de fisuras: m; señal: un…). En los datos había
+//       36 arreglos de pavimento y ninguno en m² (todos «1 un»), y luminarias y tapabaches guardados como «parcheo en caliente».
+//   (B) PR escrito a mano: un solo lector para los formularios de reporte y arreglo. Entiende 18+550, 18.550, 18,550, 18 550 y 18550 como
+//       PR 18+550. Rechaza lo imposible (más de 999 m después del «+», o un PR que no existe en ese trayecto). Si el GPS del celular lo
+//       ubica a más de 300 m del PR escrito, PREGUNTA si usa el del GPS (no bloquea). Antes «18.550» quedaba como PR 0+018 (a 8 km).
+//   (C) La «✕», el «Cancelar», tocar lo oscuro de afuera o el botón «atrás» del celular ya no borran sin preguntar un formulario que
+//       tiene algo escrito o fotos (Reportar daño, Marcar hecha, Hice un arreglo). «Hice un arreglo» ya guarda borrador (parte 88): aquí
+//       solo se pide la confirmación.
+//   (D) Reporte repetido: al guardar un reporte de daño, si ya hay una orden ABIERTA de la misma clase a menos de 25 m (10 m en
+//       pavimento), lo dice y deja escoger «Es el mismo daño» (no crea otro) o «Es otro daño». También mira los reportes que siguen en
+//       este celular sin número de orden (así pasó con OT-0103 y OT-0104: mismo inspector, 5 min y 1 m de diferencia).
+//   (E) Foto del DESPUÉS cargada de la galería: en «Arreglos por revisar» (inspector) y «Arreglos por cerrar» (coordinador junior) sale
+//       un aviso amarillo si la foto es de antes del reporte o si se tomó lejos del sitio. Desde esta versión el celular deja anotada la
+//       hora y la distancia de la foto al marcar la orden hecha; para las órdenes viejas se compara la fecha que ya traen.
+//   (F) Textos: en «Pendientes» del celular ya no se manda a «la app del PC» ni a un Excel; el conteo de drenajes sin inspeccionar sale
+//       con todos los drenajes (antes «5 de 6» cuando hay más de mil); «Marcar hecha» ya no dice que se puede guardar sin foto; la fecha
+//       de las órdenes sale como día/mes (27/11 y no 11/27).
+(function(){if(typeof DATA!=='undefined'&&DATA!=='Campo')return;
+ const H=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const el=id=>document.getElementById(id);
+ const caja=()=>document.getElementById('masbox');
+ const visible=()=>{const v=caja();return !!(v&&v.style.display!='none');};
+ const enArreglo=()=>{try{return !!(typeof CU_ARR!=='undefined'&&CU_ARR);}catch(e){return false;}};
+ const fotos=()=>{try{return ROL_FOTOS||[];}catch(e){return [];}};
+ const tipoFoto=f=>{try{return (window.ROL_TIPO&&window.ROL_TIPO.get(f))||'despues';}catch(e){return 'despues';}};
+ const pr2=m=>{try{return prTxt(m);}catch(e){m=Math.round(m);return Math.floor(m/1000)+'+'+String(m%1000).padStart(3,'0');}};
+ const metros=m=>m==null?'':(m<1000?Math.round(m)+' m':(m/1000).toFixed(1).replace('.',',')+' km');
+ // 'AAAA-MM-DD HH:MM' → '27/11 18:02' (día/mes, como se lee en Colombia)
+ const dm=s=>{const m=String(s||'').match(/(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/);return m?(m[3]+'/'+m[2]+(m[4]?' '+m[4]+':'+m[5]:'')):String(s||'');};
+ const aFecha=s=>{const m=String(s||'').match(/(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/);return m?new Date(+m[1],+m[2]-1,+m[3],+(m[4]||0),+(m[5]||0)):null;};
+ const envolver=(nombre,fabrica)=>{try{const o=window[nombre];if(typeof o!=='function')return false;window[nombre]=fabrica(o);return true;}catch(e){console.error('v445 envolver '+nombre,e);return false;}};
+
+ // =====================================================================================================================================
+ // (B) LECTOR ÚNICO DEL PR
+ // =====================================================================================================================================
+ // Devuelve el PR en metros (18+550 → 18550) o null si no se entiende. Los números que ya vienen de los datos (18550, '18550.0') no cambian.
+ function prLeer(s){
+  if(s==null)return null;if(typeof s==='number')return isFinite(s)&&s>=0?s:null;
+  let x=String(s).trim().toUpperCase().replace(/^(PR|KM|K)\s*\.?\s*/,'').trim();if(!x)return null;
+  let m=x.match(/^(\d+)\s*\+\s*(\d+(?:[.,]\d+)?)?$/);if(m)return (+m[1])*1000+(m[2]?parseFloat(m[2].replace(',','.')):0);
+  m=x.match(/^(\d{1,3})(?:[.,]|\s+)(\d{3})$/);if(m)return (+m[1])*1000+(+m[2]);      // 18.550 · 18,550 · 18 550 = 18+550 (así se escriben los miles aquí)
+  x=x.replace(/\s/g,'');if(/^\d+(\.\d+)?$/.test(x))return +x;                         // 18550 o 18550.0 (metros)
+  return null;}
+ window.p90PrLeer=prLeer;
+ try{prNum=window.prNum=prLeer;}catch(e){window.prNum=prLeer;}
+ const trN=t=>String(t==null?'':t).trim();
+ const trB=t=>trN(t).replace(/\s*\(RN.*\)\s*$/,'');
+ let _rg=null;
+ function rangos(){try{if(_rg&&_rg.v===FICHA)return _rg.m;const m={};for(const k in FICHA){const g=FICHA[k];if(!g||g.pri==null||isNaN(+g.pri))continue;const t=trN(g.t);const a=+g.pri,b=(g.prf!=null&&!isNaN(+g.prf))?+g.prf:a+(+g.L||0);(m[t]=m[t]||[]).push([Math.min(a,b),Math.max(a,b)]);}
+   for(const t in m)m[t].sort((a,b)=>a[0]-b[0]);_rg={v:FICHA,m};return m;}catch(e){return {};}}
+ function seccionesTr(t){const m=rangos();if(m[trN(t)])return m[trN(t)];const b=trB(t);let L=[];for(const k in m)if(trB(k)==b)L=L.concat(m[k]);return L.sort((a,b)=>a[0]-b[0]);}
+ function distTr(t,pr){const L=seccionesTr(t);if(!L.length)return null;let d=1e12;for(const [a,b] of L){const x=pr<a?a-pr:(pr>b?pr-b:0);if(x<d)d=x;}return d;}
+ // de dónde a dónde va el trayecto (el tramo continuo más largo; se saltan unas pocas secciones con PR raro)
+ function rangoTr(t){const L=seccionesTr(t);if(!L.length)return null;const g=[];let cur=[L[0]];for(let i=1;i<L.length;i++){if(L[i][0]-cur[cur.length-1][1]>5000){g.push(cur);cur=[];}cur.push(L[i]);}g.push(cur);
+   g.sort((a,b)=>b.length-a.length);const c=g[0];return [c[0][0],Math.max(...c.map(x=>x[1]))];}
+ // revisa lo escrito: {pr} o {pr:null} (vacío) o {error:'texto'}
+ function prRevisar(t,txt){txt=String(txt==null?'':txt).trim();if(!txt)return {pr:null};const pr=prLeer(txt);
+   if(pr==null)return {error:`No se entiende el PR «${txt}». Escríbalo como kilómetro + metros, por ejemplo 18+550.`};
+   const m=txt.match(/\+\s*(\d+)/);if(m&&+m[1]>=1000)return {error:`Después del «+» van los metros, de 0 a 999 (por ejemplo 18+550). Usted escribió «${txt}».`};
+   if(t){const d=distTr(t,pr);if(d!=null&&d>1000){const r=rangoTr(t);return {error:`El PR ${pr2(pr)} no existe en el trayecto ${t}`+(r?` (ese trayecto va más o menos del PR ${pr2(r[0])} al PR ${pr2(r[1])})`:'')+'. Revise el PR o el trayecto.'};}}
+   return {pr};}
+ window.p90PrRevisar=prRevisar;
+ function gpsFresco(){try{if(!ultimaPos)return false;}catch(e){return false;}try{return !gpsT||Date.now()-gpsT<5*60000;}catch(e){return true;}}
+ // ayuda en vivo debajo del PR: «= PR 18+550» o el problema, mientras escribe
+ function pistaPR(){try{const i=el('reppr');if(!i||!visible())return;let p=el('p90prh');
+   if(!p){const row=i.parentElement;row.insertAdjacentHTML('afterend','<div id="p90prh" style="font-size:12px;margin:3px 0 0;min-height:15px"></div>');p=el('p90prh');}
+   const r=prRevisar(el('rept')?el('rept').value:'',i.value);
+   if(r.error){p.textContent='⚠ '+r.error;p.style.color='#c62828';i.style.borderColor='#c62828';}
+   else if(r.pr!=null){p.textContent='= PR '+pr2(r.pr);p.style.color='#2e7d32';i.style.borderColor='';}else{p.textContent='';i.style.borderColor='';}}catch(e){}}
+ document.addEventListener('input',e=>{if(e.target&&(e.target.id=='reppr'))pistaPR();},true);
+ document.addEventListener('change',e=>{if(e.target&&(e.target.id=='rept'||e.target.id=='reppr'))pistaPR();},true);
+ // al guardar: rechaza lo imposible, deja el PR escrito bien (18.550 → 18+550) y compara con el GPS (pregunta, no bloquea)
+ function revisarDonde(){const i=el('reppr');if(!i)return true;const t=el('rept')?el('rept').value:'';const r=prRevisar(t,i.value);
+   if(r.error){alert('📍 '+r.error);try{i.focus();}catch(e){}pistaPR();return false;}
+   if(r.pr==null)return true;i.value=pr2(r.pr);
+   if(gpsFresco()&&typeof seccionCercana==='function'){let s=null;try{s=seccionCercana(ultimaPos,null,null);}catch(e){}
+    if(s&&s.dist<=400&&s.pr!=null){const mismo=trB(s.t)==trB(t);const dif=Math.abs(s.pr-r.pr);
+     if(!mismo||dif>300){const prg=pr2(Math.round(s.pr));
+      const msg=`📍 Su GPS lo ubica en el trayecto ${s.t}, PR ${prg}`+(mismo?`, a ${metros(dif)} del PR que escribió (${pr2(r.pr)}).`:`, pero usted escribió el trayecto ${t}, PR ${pr2(r.pr)}.`)+
+       `\n\n• Aceptar = usar la ubicación del GPS (trayecto ${s.t}, PR ${prg}).\n• Cancelar = dejar lo que escribió (por ejemplo, si el daño está más adelante).`;
+      if(confirm(msg)){try{const st=el('rept');if(st){st.value=String(s.t);if(st.value!==String(s.t)){const op=[...st.options].find(o=>trB(o.value||o.text)==trB(s.t));if(op)st.value=op.value||op.text;}}
+        if(el('repcz')&&s.cz)el('repcz').value=s.cz;i.value=prg;const g=el('repgps');if(g)g.textContent='📍 tomado del GPS (a '+Math.round(s.dist)+' m del eje)';}catch(e){}}}}}
+   pistaPR();return true;}
+
+ // =====================================================================================================================================
+ // (A) ACTIVIDAD Y UNIDAD SIN MARCAR
+ // =====================================================================================================================================
+ const UNIDAD=[[/^parcheo|^bacheo|limpieza de calzada|reparación de berma|^rocería|reparación de andén|reparación de muro/i,'m²'],
+  [/sello de fisuras|repinte de demarcación|tramo de defensa|limpieza y pintura|limpieza de cuneta|reparación de baranda|reparación de junta|reparación de cerramiento/i,'m'],
+  [/remoción de derrumbe/i,'m³'],
+  [/señal|enderezado de poste|tachas|hitos|delineadores|reposición de postes|captafaros|terminal|limpieza de alcantarilla|sumidero|tapa o rejilla|luminaria|paradero|poda de árboles/i,'un']];
+ const unidadDe=a=>{for(const [re,u] of UNIDAD)if(re.test(a||''))return u;return '';};
+ const esPavM2=a=>/^parcheo|^bacheo/i.test(a||'');
+ window.p90UnidadDe=unidadDe;
+ const PARES=[['othact','othun','othcant'],['cuact','cuun','cucant']];
+ function prepararSelects(){try{for(const [a,u] of PARES){const sa=el(a),su=el(u);if(!sa)continue;
+   if(!sa.options.length||sa.options[0].value!==''||sa.options[0].dataset.p90!=='1'){const o=document.createElement('option');o.value='';o.textContent='— Escoja qué hizo —';o.dataset.p90='1';sa.insertBefore(o,sa.firstChild);sa.value='';}
+   if(su&&(!su.options.length||su.options[0].dataset.p90!=='1')){const o=document.createElement('option');o.value='';o.textContent='— unidad —';o.dataset.p90='1';su.insertBefore(o,su.firstChild);su.value='';}
+   marcarVacio(sa);if(su)marcarVacio(su);
+   if(!sa.dataset.p90l){sa.dataset.p90l='1';sa.addEventListener('change',()=>{const un=unidadDe(sa.value);const s2=el(u);if(s2&&un){s2.value=un;marcarVacio(s2);}marcarVacio(sa);pistaUnidad(a,u);});}
+   if(su&&!su.dataset.p90l){su.dataset.p90l='1';su.addEventListener('change',()=>{marcarVacio(su);pistaUnidad(a,u);});}
+   pistaUnidad(a,u);}}catch(e){console.error('v445 actividad',e);}}
+ function marcarVacio(s){try{s.style.border=s.value===''?'2px solid #ef6c00':'';}catch(e){}}
+ function pistaUnidad(a,u){try{const sa=el(a);if(!sa)return;let p=el('p90u_'+a);const row=(el(u)||sa).parentElement;
+   if(!p){row.insertAdjacentHTML('afterend',`<div id="p90u_${a}" style="font-size:12px;color:#555;margin:2px 0 0"></div>`);p=el('p90u_'+a);}
+   const v=sa.value;p.textContent=v===''?'Escoja la actividad: la unidad se pone sola.':(esPavM2(v)?'Cantidad en m²: largo × ancho del parche (ej. 2 × 1,5 = 3 m²).':(unidadDe(v)?'Unidad: '+unidadDe(v)+'.':'Escoja la unidad si escribe cantidad.'));}catch(e){}}
+ window.p90Preparar=prepararSelects;
+ // revisa actividad, cantidad y unidad antes de guardar; devuelve true si se puede seguir
+ function revisarActividad(a,u,c){const sa=el(a);if(!sa)return true;const v=sa.value;
+   if(v===''){alert('Escoja en la lista qué actividad hizo (por ejemplo «Bacheo con mezcla en frío»).');try{sa.focus();}catch(e){}marcarVacio(sa);return false;}
+   const cant=el(c)?String(el(c).value).trim():'';const un=el(u)?el(u).value:'';
+   if(cant!==''&&un===''){alert('Escoja la unidad de la cantidad (m², m, un…).');try{el(u).focus();}catch(e){}return false;}
+   if(cant!==''&&esPavM2(v)&&un==='un'){alert('En parcheo y bacheo la cantidad va en m² (largo × ancho del parche), no en «un». Cambie la unidad o deje la cantidad vacía.');try{el(u).focus();}catch(e){}return false;}
+   return true;}
+ envolver('cuActs',o=>function(){const r=o.apply(this,arguments);prepararSelects();return r;});
+ try{cuActs=window.cuActs;}catch(e){}
+
+ // =====================================================================================================================================
+ // (E) FOTO DEL DESPUÉS DE LA GALERÍA: anotar al guardar (hora de la foto y distancia al sitio)
+ // =====================================================================================================================================
+ const GAL=()=>window.C73_GAL||{};
+ let MARCA=null;      // {tipo:'orden'|'arreglo', id, txt}
+ function banderasFotos(lista,ref,sitio,esArreglo){const out=[];
+   for(const f of lista){const m=GAL()[f];if(!m)continue;const ff=aFecha(m.fecha_foto);
+    if(ff&&ref){if(!esArreglo&&ff.getTime()<ref.getTime()-60000)out.push(`⚠ foto de galería del ${dm(m.fecha_foto)}, anterior al reporte (${dm(fmt(ref))})`);
+     if(esArreglo&&ref.getTime()-ff.getTime()>864e5)out.push(`⚠ foto de galería del ${dm(m.fecha_foto)}, ${Math.round((ref.getTime()-ff.getTime())/864e5)} día(s) antes de registrar el arreglo`);}
+    if(m.lat_foto!=null&&sitio&&sitio[0]!=null){let d=null;try{d=distM(sitio,[+m.lat_foto,+m.lon_foto]);}catch(e){}if(d!=null&&d>200)out.push(`⚠ foto tomada a ${metros(d)} del sitio`);}}
+   return [...new Set(out)];}
+ const fmt=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+ window.p90BanderasFotos=banderasFotos;
+ // el texto queda en la observación del registro (llega al PC como «Hecha_obs» o en la descripción del arreglo)
+ envolver('setRegistros',o=>function(r){try{const x=r&&r[r.length-1];if(MARCA&&x&&!x._p90){
+    if(MARCA.tipo=='orden'&&x.tipo=='orden'&&x.evento=='hecha'&&x.id_orden==MARCA.id){x._p90=1;x.observacion=(String(x.observacion||'')+' · '+MARCA.txt).replace(/^ · /,'');}
+    else if(MARCA.tipo=='arreglo'&&x.tipo=='nota'&&x.elemento){x._p90=1;x.observacion=String(x.observacion||'')+' · '+MARCA.txt;}}}catch(e){}return o.apply(this,arguments);});
+ try{setRegistros=window.setRegistros;}catch(e){}
+
+ // =====================================================================================================================================
+ // (C) NO BORRAR SIN PREGUNTAR (✕, Cancelar, tocar afuera, botón «atrás»)
+ // =====================================================================================================================================
+ let FOTO0=null,PASA=false,EMPUJADO=false,IGNORA=0;
+ function formActual(){const v=caja();if(!v||v.style.display=='none')return null;if(v.querySelector('#othact'))return 'hecha';if(v.querySelector('#reppr')&&v.querySelector('#repobs'))return enArreglo()?'arreglo':'reporte';return null;}
+ function firma(){const v=caja();if(!v)return '';const vals=[...v.querySelectorAll('input,select,textarea')].filter(x=>!(x.id||'').startsWith('p90')&&x.type!='file'&&x.type!='button').map(x=>x.type=='checkbox'?(x.checked?'1':'0'):String(x.value||''));
+   let d=0;try{d=REP&&REP.def?REP.def.size:0;}catch(e){}return JSON.stringify([vals,d]);}
+ function sucio(){const f=formActual();if(!f)return false;if(fotos().length)return true;return FOTO0!=null&&firma()!==FOTO0;}
+ window.p90Sucio=sucio;
+ function mensaje(){const f=formActual();
+   if(f=='arreglo'&&fotos().some(x=>tipoFoto(x)=='antes'))return '¿Salir del arreglo sin guardarlo?\n\nComo ya tiene la foto de ANTES, queda un borrador en el Inicio («⏳ Arreglo empezado») para seguirlo después.';
+   return '¿Salir sin guardar?\n\nSe pierde lo que escribió'+(fotos().length?' y las '+fotos().length+' foto(s) de este formulario':'')+'.\n\n• Aceptar = salir\n• Cancelar = seguir llenando';}
+ // ✕, «Cancelar» y tocar lo oscuro de afuera: se revisa ANTES de que la app cierre (fase de captura)
+ document.addEventListener('click',e=>{if(PASA)return;const v=caja();if(!v||v.style.display=='none')return;const tg=e.target;let cierra=false;
+   if(tg===v)cierra=true;
+   else if(tg&&tg.closest){const x=tg.closest('#masbox span[onclick^="masCerrar"],#masbox button');if(x&&v.contains(x)){if(x.tagName=='SPAN')cierra=true;else if(/^\s*Cancelar\s*$/i.test(x.textContent||''))cierra=true;}}
+   if(!cierra||!sucio())return;if(!confirm(mensaje())){e.stopPropagation();e.preventDefault();}},true);
+ // botón «atrás» del celular: con un formulario abierto, «atrás» cierra el formulario (no la app) y pregunta si hay algo escrito
+ function empujar(){try{if(!(history.state&&history.state.p90))history.pushState({p90:1},'');EMPUJADO=true;}catch(e){}}
+ function soltar(){try{if(EMPUJADO&&history.state&&history.state.p90){IGNORA++;history.back();}}catch(e){}EMPUJADO=false;}
+ function cerrarForm(f){PASA=true;try{if(f=='hecha'){try{otLista();}catch(e){masCerrar();}}else{try{inicioRol();}catch(e){masCerrar();}}}finally{PASA=false;}}
+ window.addEventListener('popstate',()=>{if(IGNORA>0){IGNORA--;return;}const f=formActual();if(!f){EMPUJADO=false;return;}
+   if(sucio()&&!confirm(mensaje())){try{history.pushState({p90:1},'');EMPUJADO=true;}catch(e){}return;}
+   EMPUJADO=false;cerrarForm(f);});
+ window.addEventListener('beforeunload',e=>{try{if(sucio()&&formActual()!='arreglo'){e.preventDefault();e.returnValue='';}}catch(err){}});
+ window.p90Atras=()=>{try{window.dispatchEvent(new PopStateEvent('popstate',{state:null}));}catch(e){}};      // para la prueba
+ // cada vez que se abre un panel: si es un formulario, se toma la «foto» de cómo arrancó; si no, se suelta el «atrás»
+ envolver('masPanel',o=>function(){const r=o.apply(this,arguments);
+   try{arreglarTextoFoto();}catch(e){}
+   setTimeout(()=>{try{prepararSelects();pistaPR();}catch(e){}},0);
+   setTimeout(()=>{try{if(formActual()){FOTO0=firma();empujar();}else{FOTO0=null;soltar();}}catch(e){}},120);
+   return r;});
+ try{masPanel=window.masPanel;}catch(e){}
+ envolver('masCerrar',o=>function(){const r=o.apply(this,arguments);try{FOTO0=null;soltar();}catch(e){}return r;});
+ try{masCerrar=window.masCerrar;}catch(e){}
+
+ // =====================================================================================================================================
+ // (D) REPORTE REPETIDO
+ // =====================================================================================================================================
+ const ABIERTA=o=>!['hecha','cerrada','anulada'].includes(String(o.est||''));
+ function cercanas(t,cz,pr,cl,ll){const lim=cl=='pav'?10:25;const out=[];
+   const mide=(ot,ocz,opr,olat,olon)=>{let d=null;if(pr!=null&&opr!=null&&opr!==''&&!isNaN(+opr)&&trB(ot)==trB(t)&&(!cz||!ocz||ocz==cz))d=Math.abs(+opr-pr);
+     else if(ll&&olat!=null&&olat!==''&&!isNaN(+olat)){try{d=distM(ll,[+olat,+olon]);}catch(e){}}return d;};
+   let L=[];try{L=ordenes();}catch(e){}const orgs=new Set(L.map(o=>String(o.org||'')));
+   L.forEach(o=>{if(!ABIERTA(o)||String(o.cl||'')!=cl)return;const d=mide(o.t,o.cz,o.pr,o.lat,o.lon);if(d!=null&&d<=lim)out.push({id:o.id,d,t:o.t,cz:o.cz,pr:+o.pr,txt:o.d||o.el||'',f:o.rf||o.f||'',rep:o.rep||'',foto:(o.fotos||[])[0]||'',est:o.est});});
+   // reportes que siguen en este celular (todavía sin número de orden) y los guardados «pendientes de foto»
+   const hace=Date.now()-7*864e5;const loc=[];try{(registros()||[]).forEach(r=>{if(r.tipo=='nota'&&r.elemento&&r.elemento.reporte&&!r.elemento.hecho&&!orgs.has(String(r.id))&&new Date(r.registrado||r.fecha||0).getTime()>hace)loc.push(r);});}catch(e){}
+   try{(JSON.parse(localStorage.getItem('pms_sin_foto')||'[]')||[]).forEach(r=>{if(r&&r.elemento)loc.push(Object.assign({_sf:1},r));});}catch(e){}
+   loc.forEach(r=>{if(String((r.elemento||{}).clase||'')!=cl)return;const d=mide(r.trayecto,r.calzada,r.pr_ini,r.lat,r.lon);
+     if(d!=null&&d<=lim)out.push({id:r._sf?'(en este celular, esperando foto)':'(en este celular, aún sin número de orden)',d,t:r.trayecto,cz:r.calzada,pr:+r.pr_ini,txt:String(r.observacion||'').replace(/^\[[^\]]*\]\s*/,''),f:String(r.registrado||r.fecha||'').replace('T',' ').slice(0,16),rep:r.usuario||'',foto:(r.fotos||[])[0]||'',est:'abierta'});});
+   return out.sort((a,b)=>a.d-b.d);}
+ window.p90Cercanas=cercanas;
+ let SIGUE_OTRO=false;
+ function mostrarRepetido(L){let ov=el('p90dup');if(ov)ov.remove();
+   const img=f=>{if(!f)return '';let u=f;try{if(!/^data:|^http|^blob:/.test(f)&&typeof fotoUrl==='function')u=fotoUrl(f);}catch(e){}return `<img src="${H(u)}" style="width:76px;height:60px;object-fit:cover;border-radius:8px;flex:none;background:#ddd">`;};
+   const t=L.slice(0,3).map(x=>`<div style="display:flex;gap:10px;background:#fff;border-radius:10px;padding:9px;margin:6px 0;border-left:6px solid #e65100">${img(x.foto)}<div style="flex:1;min-width:0;font-size:13px">
+     <b>${H(x.id)}</b> · a <b>${metros(x.d)}</b><br>T${H(x.t)} · ${H(x.cz||'')} · PR ${pr2(x.pr)}<div style="color:#444;margin-top:2px">${H(String(x.txt).slice(0,140))}</div><div style="color:#777;font-size:11px">${H(dm(x.f))}${x.rep?' · '+H(x.rep):''}</div></div></div>`).join('');
+   document.body.insertAdjacentHTML('beforeend',`<div id="p90dup" style="position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:3500;display:flex;align-items:flex-end"><div style="background:#f0f2f5;border-radius:14px 14px 0 0;width:100%;max-height:90vh;overflow:auto;padding:14px 14px 18px">
+     <div style="font-size:18px;font-weight:bold;color:#e65100">⚠ Ya hay un reporte abierto aquí</div><div style="font-size:14px;color:#333;margin:4px 0">Mire la foto y el sitio: ¿es el mismo daño?</div>${t}
+     <button type="button" id="p90mismo" onclick="p90DupMismo()" style="width:100%;border:0;border-radius:12px;padding:16px;background:#2e7d32;color:#fff;font-weight:bold;font-size:17px;margin-top:8px">✔ Es el mismo daño: no crear otro</button>
+     <button type="button" id="p90otro" onclick="p90DupOtro()" style="width:100%;border:0;border-radius:12px;padding:16px;background:#e65100;color:#fff;font-weight:bold;font-size:17px;margin-top:8px">➕ Es otro daño: guardar reporte nuevo</button>
+     <button type="button" onclick="p90DupVolver()" style="width:100%;border:0;border-radius:12px;padding:13px;background:#eceff1;font-size:15px;margin-top:8px">Volver al formulario</button></div></div>`);}
+ window.p90DupVolver=()=>{const ov=el('p90dup');if(ov)ov.remove();};
+ window.p90DupMismo=()=>{const ov=el('p90dup');const id=ov?(ov.querySelector('b')||{}).textContent:'';if(ov)ov.remove();
+   try{ROL_FOTOS.length=0;}catch(e){}FOTO0=null;PASA=true;try{inicioRol();}finally{PASA=false;}
+   setTimeout(()=>{try{avisoCorto('✔ No se creó otro reporte: '+(id&&/^OT/.test(id)?'la '+id+' ya está abierta.':'ese daño ya está reportado.'));}catch(e){alert('No se creó otro reporte: ese daño ya está reportado.');}},150);};
+ window.p90DupOtro=()=>{const ov=el('p90dup');if(ov)ov.remove();SIGUE_OTRO=true;try{repGuardar();}finally{SIGUE_OTRO=false;}};
+
+ // =====================================================================================================================================
+ // repGuardar (Reportar daño y Hice un arreglo): actividad, PR/GPS, repetido y foto de galería
+ // =====================================================================================================================================
+ envolver('repGuardar',o=>function(){
+   if(!el('reppr'))return o.apply(this,arguments);
+   if(enArreglo()&&!revisarActividad('cuact','cuun','cucant'))return;
+   if(!SIGUE_OTRO&&!revisarDonde())return;
+   if(!enArreglo()&&!SIGUE_OTRO){try{const t=el('rept').value,cz=el('repcz')?el('repcz').value:'',pr=prLeer(el('reppr').value);let cl='pav';try{cl=grupoK(REP.g).k;}catch(e){cl=(REP&&REP.g)||'pav';}
+     let ll=null;try{ll=(gpsFresco()&&ultimaPos)?[ultimaPos[0],ultimaPos[1]]:null;}catch(e){}
+     if(t&&pr!=null){const L=cercanas(t,cz,pr,cl,ll);if(L.length){mostrarRepetido(L);return;}}}catch(e){console.error('v445 repetido',e);}}
+   if(enArreglo()){try{const desp=fotos().filter(f=>tipoFoto(f)!='antes');let sitio=null;
+     try{const cod=seccionDe(el('rept').value,el('repcz').value||'Derecha',el('repcar').value||'Externo',prLeer(el('reppr').value));const q=cod&&COORDS[cod];if(q)sitio=[(q[0]+q[2])/2,(q[1]+q[3])/2];}catch(e){}
+     if(!sitio){try{if(ultimaPos)sitio=[ultimaPos[0],ultimaPos[1]];}catch(e){}}
+     const b=banderasFotos(desp,new Date(),sitio,true);MARCA=b.length?{tipo:'arreglo',txt:b.join(' · ')}:null;}catch(e){MARCA=null;}}
+   const n0=(()=>{try{return registros().length;}catch(e){return -1;}})();
+   try{return o.apply(this,arguments);}finally{MARCA=null;try{if(registros().length!==n0)FOTO0=null;}catch(e){}}});
+ try{repGuardar=window.repGuardar;}catch(e){}
+
+ // Marcar hecha: actividad, unidad y foto de galería
+ envolver('otHechaGuardar',o=>function(id){
+   if(el('othact')&&!revisarActividad('othact','othun','othcant'))return;
+   let txt='';try{const or=otDe(id);if(or){const desp=fotos().filter(f=>tipoFoto(f)!='antes');const b=banderasFotos(desp,aFecha(or.rf||or.f),(or.lat!=null&&or.lat!=='')?[+or.lat,+or.lon]:null,false);txt=b.join(' · ');}}catch(e){}
+   MARCA=txt?{tipo:'orden',id,txt}:null;const antes=(()=>{try{return registros().length;}catch(e){return -1;}})();
+   let r;try{r=o.apply(this,arguments);}finally{MARCA=null;}
+   try{if(txt&&registros().length!==antes){const L=locGet('pms_ord_loc');if(L[id]){L[id].hobs=(String(L[id].hobs||'')+' · '+txt).replace(/^ · /,'');locSet('pms_ord_loc',L);}}}catch(e){}
+   try{if(registros().length!==antes)FOTO0=null;}catch(e){}
+   return r;});
+ try{otHechaGuardar=window.otHechaGuardar;}catch(e){}
+ envolver('otHecha',o=>function(){const r=o.apply(this,arguments);setTimeout(prepararSelects,0);setTimeout(prepararSelects,450);return r;});
+ try{otHecha=window.otHecha;}catch(e){}
+ envolver('cuArreglo',o=>function(){const r=o.apply(this,arguments);setTimeout(prepararSelects,0);setTimeout(prepararSelects,450);return r;});
+ try{cuArreglo=window.cuArreglo;}catch(e){}
+
+ // =====================================================================================================================================
+ // (E) en las listas «Arreglos por revisar» y «Arreglos por cerrar»: aviso amarillo de la foto
+ // =====================================================================================================================================
+ function avisosFoto(o){const out=[];const hob=String(o.hobs||''),des=String(o.d||'');const propio=/arreglo propio|arreglada por la cuadrilla/.test(hob);
+   (hob+' '+des).replace(/⚠ foto[^·\[\]]*/g,m=>{out.push(m.trim());return m;});
+   if(!out.some(x=>/anterior al reporte|antes de registrar/.test(x))){const ref=String(o.rf||o.f||'').slice(0,10);
+     if(ref){const fuente=propio?des:hob;fuente.replace(/(tomada el|archivo del) (\d{4}-\d{2}-\d{2})/g,(m,a,f)=>{if(f<ref)out.push(`⚠ foto de galería del ${dm(f)}, anterior al ${propio?'día del reporte':'reporte'} (${dm(ref)})`);return m;});}}
+   return [...new Set(out)];}
+ window.p90AvisosFoto=avisosFoto;
+ envolver('otTarjeta',o=>function(ot,modo){let h=o.apply(this,arguments);try{if((modo=='verificar'||modo=='cerrar')&&ot){const A=avisosFoto(ot);
+    if(A.length){const caja_=`<div class="p90fl" style="background:#fff8e1;border:1px solid #f9a825;border-left:6px solid #f9a825;border-radius:8px;padding:7px 9px;margin-top:6px;font-size:13px;color:#6d4c00"><b>${A.map(H).join('<br>')}</b><div style="font-size:12px;margin-top:2px">Confírmelo con la cuadrilla antes de dar el visto bueno.</div></div>`;
+     const k=h.indexOf('<div style="display:flex;gap:6px;margin-top:8px');h=k>0?h.slice(0,k)+caja_+h.slice(k):h.replace(/<\/div>\s*$/,caja_+'</div>');}}}catch(e){console.error('v445 tarjeta',e);}return h;});
+ try{otTarjeta=window.otTarjeta;}catch(e){}
+
+ // =====================================================================================================================================
+ // (F) TEXTOS
+ // =====================================================================================================================================
+ // «Marcar hecha» decía «Si no tiene foto ahora, puede guardar igual…», pero no deja guardar sin foto
+ function arreglarTextoFoto(){const v=caja();if(!v)return;const f=v.querySelector('#othact')?'hecha':(enArreglo()&&v.querySelector('#reppr')?'arreglo':null);if(!f)return;
+   [...v.querySelectorAll('div')].forEach(d=>{if(d.children.length==0&&/^Si no tiene foto ahora, puede guardar igual/.test(d.textContent||'')){
+     d.textContent=f=='hecha'?'La foto de DESPUÉS (cómo quedó) es obligatoria para marcar la orden hecha.':'Para guardar el arreglo se necesitan la foto de ANTES y la de DESPUÉS. Desde que toma la de ANTES queda un borrador en el Inicio.';d.style.color='#5d4037';}});}
+ // «Pendientes» del inspector, del coordinador junior y de la cuadrilla: sin pasos de «app del PC» ni de Excel, y drenajes bien contados
+ const PC_RE=/app del PC|\.xlsx|\.bat\b|PC\s*→|en el PC\b|Excel/i;
+ function pasosCampo(c){const out=[];for(const s of (c||[])){const x=String(s);if(!PC_RE.test(x)){out.push(x);continue;}
+     const m=x.match(/(?:app del )?celular\s*(?:→|:)\s*([^)]+)/i);if(m)out.push('En el celular: '+m[1].trim().replace(/[.)\s]+$/,'')+'.');}
+   return out.length?out:['Esto lo atiende la oficina (Erix) en el PC: usted no tiene que hacer nada aquí.'];}
+ function drenajesConteo(){try{const L=drenInventario();const sin=L.filter(d=>!d.fecha).length;return [sin,L.length];}catch(e){return null;}}
+ window.p90PasosCampo=pasosCampo;
+ envolver('pendSistema',o=>function(){const L=o.apply(this,arguments);let rol='';try{rol=rolActual();}catch(e){}
+   if(!/^(inspector|coordinador_junior|campo)$/.test(rol))return L;
+   return (L||[]).map(a=>{const b=Object.assign({},a);try{b.c=pasosCampo(a.c);
+     const m=String(a.t||'').match(/^(\d+) de (\d+) drenajes del inventario sin inspeccionar/);if(m){const k=drenajesConteo();if(k&&k[1]>+m[2])b.t=`${k[0]} de ${k[1]} drenajes sin inspeccionar`;}}catch(e){}return b;});});
+ try{pendSistema=window.pendSistema;}catch(e){}
+ // pie de «Pendientes»: decir que esos avisos no son tareas del celular
+ envolver('pendPanel',o=>function(){const r=o.apply(this,arguments);try{let rol='';try{rol=rolActual();}catch(e){}if(/^(inspector|coordinador_junior|campo)$/.test(rol)){const v=caja();
+     [...v.querySelectorAll('div')].forEach(d=>{if(d.children.length==0&&/^Los avisos del sistema vienen del PC/.test(d.textContent||''))d.textContent='Los avisos del sistema los calcula el PC ('+dm((VERSION&&VERSION.generado)||'')+'). Si dicen «En el celular», se hacen aquí; los demás los atiende la oficina.';});}}catch(e){}return r;});
+ try{pendPanel=window.pendPanel;}catch(e){}
+ // fecha de las órdenes en el Inicio de la cuadrilla: 27/11 (día/mes) y no 11/27
+ envolver('cuInicio',o=>function(){const r=o.apply(this,arguments);try{const g=String((VERSION&&VERSION.generado)||'');const v=caja();
+   if(g&&v)[...v.querySelectorAll('div')].forEach(d=>{if(d.children.length==0&&/^Órdenes al /.test(d.textContent||''))d.textContent=d.textContent.replace(/^Órdenes al [^.]*\./,'Órdenes al '+dm(g)+'.');});}catch(e){}return r;});
+ try{cuInicio=window.cuInicio;}catch(e){}
+})();
+</script><script>
+(function(){if(typeof DATA!=='undefined'&&DATA!=='Campo')return;
+// ============================================================================================================================
+// v445 · MEJORAS DE GESTIÓN (aprobado por Erix 27-nov-2026: las 7 propuestas de gestión de la revisión del ingeniero de software)
+//  (0) Avance del contrato bien sumado: el «Fresado» ya no se suma con su transporte (m³ con m³-km) y las dos mezclas (MDC 25 y MDC 19)
+//      ya no se cuentan dos veces. Regla igual a la del acta del PC: primero el nombre exacto del ítem; dos ítems distintos del mismo
+//      contrato nunca son la misma actividad; un transporte solo se junta con otro transporte del mismo material.
+//  (1) Validar obras por SITIO: las cajas del mismo parche salen juntas, con botones para revisar o rechazar todo el sitio de una vez;
+//      el transporte sigue a su fresado o a su mezcla; la observación del contratista se muestra limpia (sin código de página).
+//  (2) Actas y programa: aviso y freno cuando un ítem se pasa de lo contratado (o tiene 0 contratado, como la geomalla); solo el gestor o
+//      el administrador confirman. En la programación: aviso de lo que se pasa y el PR real de los sitios que salían «PR 0+000».
+//  (3) Las actas hechas a mano (importadas) cuentan en el avance y el saldo (CTO 2026-35: acta N.º 1 = $319 M = 50 %).
+//  (4) Ritmo de obra contra plazo: lo que falta contra los días hábiles que quedan, con semáforo, en la tarjeta del contrato.
+//  (5) Solicitudes de acta repetidas: se muestra una sola; registros de PRUEBA: no cuentan como rechazos y el contratista no los ve.
+//  (6) Contratista de señalización: calculadora de m² (bandas, flechas, pictogramas…) y la bitácora no deja la hora de fin antes que
+//      la de inicio sin preguntar.
+// Todo envuelve funciones que ya existen (se guarda la original y se llama); si algo falla, queda lo de antes.
+// ============================================================================================================================
+const W=window;const $$=id=>document.getElementById(id);
+// VERSION es una variable de la página (no de window): se lee con esta función
+const VV=()=>{try{return (typeof VERSION!=='undefined'&&VERSION)||{};}catch(e){return {};}};
+const E=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const N=v=>{const x=parseFloat(String(v==null?'':v).replace(',','.'));return isFinite(x)?x:0;};
+const F=(v,d)=>{const x=+v;if(!isFinite(x))return '—';return x.toLocaleString('es-CO',{minimumFractionDigits:d,maximumFractionDigits:d});};
+const M$=v=>{try{return cop(v);}catch(e){return '$'+Math.round(v);}};
+const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
+const ctrs=()=>{try{return contratosLista();}catch(e){return VV().contratos||[];}};
+const rolYo=()=>{try{return typeof rolV=='function'?rolV():rolActual();}catch(e){return '';}};
+const esContratista=()=>{try{return typeof ctrEsContratista=='function'&&ctrEsContratista();}catch(e){return false;}};
+const faDe=c=>{const a=(c&&c.aiu)||{};return 1+((+a.A_pct||0)+(+a.I_pct||0)+(+a.U_pct||0))/100+((+a.U_pct||0)/100)*((+a.IVA_sobre_U_pct||0)/100);};
+const hoyISO=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);};
+const prT=v=>{const n=N(v);if(v===''||v==null||!isFinite(n))return '';try{return prTxt(n);}catch(e){return String(v);}};
+// registros de PRUEBA: el que rechazó escribió solo «PRUEBA» o «por prueba», o el usuario es de prueba, o el PC ya lo marcó (prueba=1)
+const RE_PRUEBA=/^\s*(registro\s+de\s+)?(por\s+)?pruebas?\s*[.!]*\s*$/i;
+const esPrueba=x=>!!x&&(x.prueba==1||RE_PRUEBA.test(String(x.vobs||''))||/PRUEBA/i.test(String(x.u||x.usuario||'')));
+W.v445EsPrueba=esPrueba;
+
+// ---------------------------------------------------------------- (0) qué ítem es cada actividad
+let PARES=null,PARES_K=null;
+function paresContrato(){const L=ctrs();if(PARES&&PARES_K===L)return PARES;PARES=new Set();PARES_K=L;
+ L.forEach(c=>{const n=(c.items||[]).map(i=>norm(i.actividad)).filter(Boolean);n.forEach(a=>n.forEach(b=>{if(a!=b)PARES.add(a+'||'+b);}));});return PARES;}
+const subTr=s=>/fresad/.test(s)?'f':(/mezcla|asfalt/.test(s)?'m':(/cama baja|equipo/.test(s)?'e':'o'));
+const espec=s=>{const m=/\bm[ds]c[\s-]*(\d+)/.exec(s);return m?m[1]:'';};
+if(typeof W.vcMismaAct==='function'){const _vma=W.vcMismaAct;
+ W.vcMismaAct=function(a,b){try{const A=norm(a),B=norm(b);if(!A||!B)return _vma(a,b);if(A==B)return true;
+   if(paresContrato().has(A+'||'+B))return false;                 // dos ítems distintos del mismo contrato nunca son la misma actividad
+   const tA=/transporte/.test(A),tB=/transporte/.test(B);if(tA!==tB)return false;   // el transporte (m³-km) no se junta con el material (m³)
+   if(tA&&tB)return subTr(A)==subTr(B);
+   const sA=espec(A),sB=espec(B);if(sA&&sB&&sA!=sB)return false;  // MDC 19 no es MDC 25
+  }catch(e){}return _vma(a,b);};
+ try{vcMismaAct=W.vcMismaAct;}catch(e){}}
+// el ítem del contrato de una actividad registrada: el nombre exacto primero; si no, el único ítem que se le parezca (como el acta del PC)
+function itemDe(c,act){const it=(c&&c.items)||[];const a=norm(act);const ex=it.find(i=>norm(i.actividad)==a);if(ex)return ex;
+ const cand=it.filter(i=>{try{return vcMismaAct(i.actividad,act);}catch(e){return false;}});return cand.length==1?cand[0]:null;}
+W.v445ItemDe=itemDe;
+
+// ---------------------------------------------------------------- (3) actas: las hechas a mano y lo ya pagado por ítem
+function actasCtr(ctr){try{return (((VV().relaciones||{}).actas_obra||{}).actas||[]).filter(a=>a.c==ctr);}catch(e){return [];}}
+function actasMano(c){return actasCtr(c.contrato).filter(a=>a.est=='importada');}
+// cantidades por ítem de una lista de actas (campo «items» que manda el PC desde v445); null si el PC todavía no las manda
+function qActas(c,L){const q={};let sin=false;L.forEach(a=>{if(!Array.isArray(a.items)){sin=true;return;}a.items.forEach(([n,act,un,v])=>{const it=(c.items||[]).find(i=>String(i.item)==String(n))||itemDe(c,act);if(it)q[it.item+'|'+it.actividad]=(q[it.item+'|'+it.actividad]||0)+N(v);});});return sin?null:q;}
+const kIt=i=>i.item+'|'+i.actividad;
+
+// ---------------------------------------------------------------- (0)(3) avance del contrato en pesos, registrado y validado
+function avance(c){const A=((VV().avance_contratos||{})[c.contrato])||[];const items=c.items||[];const fa=faDe(c);
+ const reg={},val={},otras=[];A.forEach(a=>{const it=itemDe(c,a.act);if(!it){otras.push(a);return;}reg[kIt(it)]=(reg[kIt(it)]||0)+N(a.reg)-N(a.rech);val[kIt(it)]=(val[kIt(it)]||0)+N(a.val);});
+ const man=actasMano(c);const qm=qActas(c,man);const cdMano=man.reduce((s,a)=>s+N(a.cd),0);const vtMano=man.reduce((s,a)=>s+N(a.vt),0);
+ let V=0,vr=0,vv=0,pesosReg=0,pesosVal=0;const exc=[];
+ items.forEach(i=>{const k=kIt(i),cap=N(i.cantidad),pu=N(i.precio);const m=qm?(qm[k]||0):0;const r=m+(reg[k]||0),v=m+(val[k]||0);
+  V+=cap*pu;vr+=Math.min(r,cap)*pu;vv+=Math.min(v,cap)*pu;pesosReg+=r*pu;pesosVal+=v*pu;
+  if(r>cap+Math.max(0.005*cap,0.01))exc.push({it:i,q:r,cap:cap,val:v});});
+ if(!qm&&cdMano){vr+=cdMano;vv+=cdMano;pesosReg+=cdMano;pesosVal+=cdMano;}      // sin cantidades por ítem: el costo directo del acta a mano
+ const valor=N(c.valor)||V*fa;
+ return {pctReg:V?100*vr/V:0,pctVal:V?100*vv/V:0,ejecReg:pesosReg*fa,ejecVal:pesosVal*fa,saldo:valor-pesosVal*fa,valor:valor,mano:vtMano||cdMano*fa,pctMano:valor?100*(vtMano||cdMano*fa)/valor:0,nMano:man.length,exc:exc,otras:otras,fa:fa};}
+W.v445Avance=avance;
+
+// ---------------------------------------------------------------- (4) ritmo de obra contra plazo
+const DIAS_SEM=6;      // lunes a sábado
+function habiles(d0,d1){let n=0;const a=new Date(d0+'T12:00:00'),b=new Date(d1+'T12:00:00');for(let d=a;d<=b;d.setDate(d.getDate()+1)){const w=d.getDay();if(w!==0&&(DIAS_SEM>=6||w!==6))n++;}return n;}
+function inicioDe(c){try{return (typeof vcActa=='function'&&vcActa(c))||c.fecha_inicio||'';}catch(e){return c.fecha_inicio||'';}}
+function finDe(c){try{return (typeof vcFin=='function'&&vcFin(c))||c.fecha_fin||'';}catch(e){return c.fecha_fin||'';}}
+function ritmo(c,hoy){hoy=hoy||hoyISO();const ini=String(inicioDe(c)).slice(0,10),fin=String(finDe(c)).slice(0,10);if(!/^\d{4}-\d\d-\d\d$/.test(ini)||!/^\d{4}-\d\d-\d\d$/.test(fin)||fin<hoy||ini>hoy)return null;
+ const av=avance(c);const falta=Math.max(0,av.valor-av.ejecReg);const dq=habiles(hoy,fin);
+ const d0=new Date(hoy+'T12:00:00');d0.setDate(d0.getDate()-13);let v0=d0.toISOString().slice(0,10);if(v0<ini)v0=ini;
+ let hecho=0;(VV().recibidos||[]).forEach(x=>{if(x.c!=c.contrato||!x.act||x.ev=='rechazado'||esPrueba(x))return;const f=String(x.fe||'').slice(0,10);if(f<v0||f>hoy)return;const it=itemDe(c,x.act);if(it)hecho+=N(x.cant)*N(it.precio)*av.fa;});
+ const dv=Math.max(1,habiles(v0,hoy));const nec=dq>0?falta/dq:Infinity,rit=hecho/dv;
+ const sem=falta<=0||rit>=nec?'verde':(rit*1.2>=nec?'amarillo':'rojo');return {falta,dias:dq,fin,nec,rit,sem,hecho};}
+W.v445Ritmo=ritmo;
+
+// ---------------------------------------------------------------- bloque de resumen (tarjeta del contrato, reglas y trabajo del contrato)
+function bloque(c){const a=avance(c);const r=ritmo(c);const col={verde:'#2e7d32',amarillo:'#ef6c00',rojo:'#c62828'};
+ let h=`<div class="v445av" style="margin:6px 0;padding:7px 9px;border-radius:8px;background:#f1f8e9;border-left:5px solid #2e7d32;font-size:12px">
+  <b>📊 Avance: ${F(a.pctReg,1)} % registrado · ${F(a.pctVal,1)} % validado</b> <span style="color:#555">(pesa cada ítem por su valor; lo validado es lo que va al acta)</span>`;
+ if(a.nMano)h+=`<br>📝 Pagado en acta(s) hecha(s) a mano: <b>${M$(a.mano)}</b> (${F(a.pctMano,1)} % del contrato) · ya está sumado en el avance`;
+ h+=`<br>💰 Saldo por ejecutar (valor − lo validado y lo pagado): <b>${M$(a.saldo)}</b> de ${M$(a.valor)}</div>`;
+ if(a.exc.length)h+=`<div class="v445exc" style="margin:6px 0;padding:7px 9px;border-radius:8px;background:#ffebee;border-left:5px solid #c62828;font-size:12px"><b>⚠ Se pasa de lo contratado</b> (mayor cantidad: el acta necesita la confirmación del gestor o del administrador):<br>${a.exc.map(x=>`• ${E(x.it.actividad)}: ${F(x.q,1)} registrados de ${F(x.cap,1)} ${E(x.it.unidad||'')} contratados${x.cap?'':' <b>(ítem sin cantidad contratada)</b>'}`).join('<br>')}</div>`;
+ if(r){h+=`<div class="v445rit" style="margin:6px 0;padding:7px 9px;border-radius:8px;background:#fff;border-left:5px solid ${col[r.sem]};font-size:12px"><b style="color:${col[r.sem]}">⏱ Ritmo de obra: ${r.sem=='rojo'?'NO ALCANZA':r.sem=='amarillo'?'va justo':'alcanza'}</b><br>
+  Faltan <b>${M$(r.falta)}</b> en <b>${r.dias}</b> día(s) hábil(es) (hasta el ${E(r.fin)}): se necesitan <b>${M$(r.nec)}</b> por día. El ritmo de las últimas 2 semanas es <b>${M$(r.rit)}</b> por día <span style="color:#666">(según lo registrado en la app)</span>.${r.sem=='rojo'?'<br><span style="color:#c62828">Hable a tiempo de prórroga u otrosí, o de pasar sitios al contrato siguiente.</span>':''}</div>`;}
+ return h;}
+W.v445Bloque=bloque;
+
+// «📑 Mi contrato» / «Contratos activos»: el resumen debajo del valor de cada contrato
+if(typeof W.ctrAvance==='function'){const _ca=W.ctrAvance;W.ctrAvance=function(){const r=_ca.apply(this,arguments);try{const v=masCaja();const cl=ctrs();
+  if(v)[...v.querySelectorAll('div')].forEach(d=>{const f=d.firstElementChild;if(!f||f.tagName!='DIV'||!/font-size:15px/.test(f.getAttribute('style')||''))return;const c=cl.find(x=>x.contrato==f.textContent.trim());if(!c||d.querySelector('.v445av'))return;
+   const val=[...d.children].find(x=>/^valor /.test((x.textContent||'').trim()));(val||f).insertAdjacentHTML('afterend',bloque(c));});}catch(e){console.error('v445 ctrAvance',e);}return r;};
+ try{ctrAvance=W.ctrAvance;}catch(e){}}
+// «📐 Reglas del contrato» y «Trabajo de su contrato»: el mismo resumen al lado de «Avance del contrato»
+function ponerEnAvance(){try{const v=masCaja();if(!v||v.querySelector('.v445av'))return;const c=(typeof vcContrato=='function')&&vcContrato();if(!c)return;
+ const t=[...v.querySelectorAll('div')].find(d=>/^Avance del contrato:/.test((d.textContent||'').trim())&&!d.querySelector('div'));if(!t)return;
+ const a=avance(c);t.textContent=`Avance del contrato: ${F(a.pctReg,1)} % registrado · ${F(a.pctVal,1)} % validado`;
+ const bar=t.nextElementSibling;if(bar&&bar.firstElementChild)bar.firstElementChild.style.width=Math.min(100,a.pctReg)+'%';
+ (bar||t).insertAdjacentHTML('afterend',bloque(c));}catch(e){console.error('v445 avance',e);}}
+['vcReglasPanel','vcProgramacion'].forEach(n=>{if(typeof W[n]!=='function')return;const _o=W[n];W[n]=function(){const r=_o.apply(this,arguments);ponerEnAvance();if(n=='vcProgramacion')programaAvisos();return r;};try{if(n=='vcReglasPanel')vcReglasPanel=W[n];else vcProgramacion=W[n];}catch(e){}});
+
+// ---------------------------------------------------------------- (2) programación: lo que se pasa y los sitios «PR 0+000»
+function programaAvisos(){try{const v=masCaja();const c=(typeof vcContrato=='function')&&vcContrato();if(!v||!c||v.querySelector('.v445prog'))return;
+ // «Cantidades que resultan: Fresado: 1000 m³ de 997» → en rojo si se pasa (cada línea va separada por un salto <br>)
+ const cq=[...v.querySelectorAll('div')].find(d=>/^Cantidades que resultan/.test((d.textContent||'').trim()));
+ if(cq){cq.innerHTML=cq.innerHTML.split(/<br\s*\/?>/i).map(seg=>{const t=seg.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').trim();const m=/^(.+?):\s*([\d.,]+)\s*(\S+)\s+de\s+([\d.,]+)\s*$/.exec(t);if(!m)return seg;
+   const q=N(m[2].replace(/\.(?=\d{3}\b)/g,'').replace(',','.')),cap=N(m[4].replace(/\.(?=\d{3}\b)/g,'').replace(',','.'));
+   return q>cap+0.5?`<span style="color:#c62828">${seg} <b class="v445mas">⚠ más de lo contratado (${F(q-cap,0)} de más)</b></span>`:seg;}).join('<br>');}
+ const P=(typeof progDe=='function'&&progDe(c.contrato))||[];const sin=P.filter(r=>!r.cod);
+ if(sin.length){const usados=new Set();
+  [...v.querySelectorAll('b')].filter(b=>/PR 0\+000/.test(b.textContent||'')).forEach(b=>{const t=(b.parentElement||b).textContent||'';const bt=b.textContent;
+   const i=sin.findIndex((x,i)=>!usados.has(i)&&bt.indexOf(String(x.cz))===0&&bt.indexOf(String(x.car))>0&&new RegExp('· '+Math.round(N(x.L))+' m\\b').test(t));if(i<0)return;usados.add(i);const r=sin[i];
+   b.innerHTML=E(bt.replace('PR 0+000','PR '+prT(r.p0)+(r.p1?'–'+prT(r.p1):'')))+' <span style="color:#c62828">(sin sección en el mapa)</span>';});
+  const h=`<div class="v445prog" style="margin:6px 0;padding:7px 9px;border-radius:8px;background:#fff3e0;border-left:5px solid #ef6c00;font-size:12px"><b>⚠ ${sin.length} sitio(s) del programa no tienen sección en el mapa</b> (antes salían como «PR 0+000»). Vaya al PR real:<br>${sin.map(r=>`• Trayecto ${E(r.t)} ${E(r.cz)} ${E(r.car)} · PR ${E(prT(r.p0))}${r.p1?'–'+E(prT(r.p1)):''} · ${F(N(r.L),0)} m · ${M$(N(r.val))}`).join('<br>')}</div>`;
+  const t0=[...v.querySelectorAll('div')].find(d=>/sitios de parcheo/.test(d.textContent||'')&&!d.querySelector('div'));(t0||v.firstElementChild).insertAdjacentHTML('afterend',h);}
+ else v.insertAdjacentHTML('afterbegin','<span class="v445prog" style="display:none"></span>');}catch(e){console.error('v445 programa',e);}}
+
+// ---------------------------------------------------------------- (1) VALIDAR OBRAS POR SITIO
+const famCaja=a=>{const s=norm(a);if(/transporte/.test(s)){if(/fresad/.test(s))return 'tr_fresado';if(/mezcla|asfalt/.test(s))return 'tr_mezcla';return '';}
+ if(/microfres/.test(s))return '';if(/fresad/.test(s))return 'fresado';if(/parcheo|bacheo|\bmdc\b|\bmsc\b|concreto asf|mezcla/.test(s))return 'mezcla';return '';};
+const MADRE={tr_fresado:'fresado',tr_mezcla:'mezcla'};const ART={fresado:'el fresado',mezcla:'la mezcla'};
+const prI=v=>{const n=N(v);return isFinite(n)?String(Math.round(n)):String(v||'');};
+const sitioDe=o=>[o.contrato||o.c||'',o.cod||'',String(o.fecha||o.fe||'').slice(0,10),prI(o.p1),prI(o.p2)].join('|');
+const RE_CAJA=/\[caja (\d+) de (\d+) del mismo sitio · total del sitio (\$[\d.,]+)\]/;
+const limpiarObs=s=>String(s||'').replace(/\[caja \d+ de \d+ del mismo sitio · total del sitio \$[\d.,]+\]\s*/g,'').trim();
+W.v445SitioDe=sitioDe;
+// todas las cajas del sitio (las que esperan en la cadena y las que ya pasaron o se rechazaron)
+function cajasSitio(k){const PV=(VV().por_validar||[]);const ya=new Set();const out=[];
+ PV.forEach(o=>{if(sitioDe(o)==k){ya.add(o.id);out.push({id:o.id,act:o.act,cant:o.cant,un:o.un,ev:o.est,vobs:o.vobs,obs:o.obs,o:o});}});
+ (VV().recibidos||[]).forEach(x=>{if(ya.has(x.id)||!x.act)return;if(sitioDe({contrato:x.c,cod:x.cod,fecha:x.fe,p1:x.p1,p2:x.p2})!=k)return;out.push({id:x.id,act:x.act,cant:x.cant,un:x.un,ev:x.ev||'registrado',vobs:x.vobs,obs:''});});
+ let hechas={};try{JSON.parse(localStorage.getItem('pms_validadas')||'[]').forEach(h=>hechas[h.id]=h.estado);}catch(e){}
+ out.forEach(x=>{if(hechas[x.id])x.ev=hechas[x.id];});return out;}
+// ¿el fresado o la mezcla de este transporte fue rechazado? (mismo sitio)
+function huerfano(o){const m=MADRE[famCaja(o.act)];if(!m)return '';const S=cajasSitio(sitioDe(o));return S.some(x=>x.id!=o.id&&famCaja(x.act)==m&&x.ev=='rechazado')?m:'';}
+// ¿el transporte cuadra con su fresado o su mezcla? (distancia = cantidad contratada del transporte ÷ la de su material)
+function cuadreTransporte(o){const f=famCaja(o.act);const m=MADRE[f];if(!m)return '';const c=ctrs().find(x=>x.contrato==o.contrato);if(!c)return '';
+ const capT=(c.items||[]).filter(i=>famCaja(i.actividad)==f).reduce((s,i)=>s+N(i.cantidad),0),capM=(c.items||[]).filter(i=>famCaja(i.actividad)==m).reduce((s,i)=>s+N(i.cantidad),0);
+ const S=cajasSitio(sitioDe(o)).filter(x=>famCaja(x.act)==m&&x.ev!='rechazado');if(!S.length)return `no hay ${ART[m]} registrad${m=='mezcla'?'a':'o'} en este sitio para este transporte`;
+ if(!capT||!capM)return '';const k=capT/capM;const q=S.reduce((s,x)=>s+N(x.cant),0);const esp=q*k;if(Math.abs(N(o.cant)-esp)>0.1*esp+0.5)return `no cuadra: con ${F(q,2)} m³ de ${m} se esperan unos ${F(esp,1)} ${E(o.un||'')} (${F(k,1)} km), y dice ${F(N(o.cant),1)}`;return '';}
+W.v445Huerfano=huerfano;W.v445CuadreTransporte=cuadreTransporte;
+const EVT={registrado:['registrada','#2e7d32'],revisado:['revisada','#00897b'],validado:['validada','#1565c0'],aprobado:['aprobada','#4a148c'],rechazado:['rechazada','#b71c1c']};
+function exigeGestor(){try{return !!VV().relaciones.actas_obra.exigir_gestor;}catch(e){return false;}}
+function v445ValidarPanel(){const p=miPaso();if(!p){alert('Su rol no valida obras.');return;}const L=porValidar();const z=(rolActual()=='inspector'||rolActual()=='coordinador_junior')?miZona():'';
+ const esp=puede('administrar')?valTodas().filter(o=>o.est!=p[0]):[];
+ const grupos=(lista)=>{const G=new Map();lista.forEach(o=>{const k=sitioDe(o);if(!G.has(k))G.set(k,[]);G.get(k).push(o);});return [...G.entries()];};
+ const tarjSitio=([k,os],activa)=>{const o0=os[0];const S=cajasSitio(k);const tag=RE_CAJA.exec(String(o0.obs||''));const otras=S.filter(x=>!os.some(o=>o.id==x.id));
+  const ids=os.map(o=>o.id);const hu=os.filter(o=>huerfano(o));const obsC=[...new Set(os.map(o=>limpiarObs(o.obs)).filter(Boolean))];
+  let h=`<div class="v445sitio" data-sitio="${E(k)}" style="background:#fff;border-radius:10px;padding:8px 10px;margin:8px 0;border-left:6px solid ${activa?'#4a148c':'#b0bec5'};${activa?'':'opacity:.8'}">
+   <div style="font-size:13px"><b>📍 Trayecto ${E(o0.t)}${zonaDe(o0.t)?' ('+E(zonaDe(o0.t))+')':''} · ${E(o0.cz)} ${E(o0.car)} · PR ${E(prT(o0.p1))}${o0.p2&&prI(o0.p2)!=prI(o0.p1)?' → '+E(prT(o0.p2)):''}</b></div>
+   <div style="font-size:12px;color:#555">${E(o0.contratista||o0.usuario)} · ${E(o0.contrato)} · ${E(o0.fecha)} · ${S.length} caja(s) en el sitio${tag?' · total del sitio '+E(tag[3]):''}</div>
+   ${obsC.length?`<div style="font-size:12px;font-style:italic;color:#444">«${obsC.map(E).join(' · ')}»</div>`:''}`;
+  if(hu.length)h+=`<div style="font-size:12px;background:#ffebee;border-radius:6px;padding:4px 7px;margin:4px 0;color:#b71c1c">⚠ ${hu.length} transporte(s) de este sitio quedaron sin su caja: ${E(ART[huerfano(hu[0])])} fue rechazad${huerfano(hu[0])=='mezcla'?'a':'o'}. El transporte sigue a su caja y debe rechazarse también.</div>`;
+  h+=os.map(o=>{const hx=huerfano(o);const cu=cuadreTransporte(o);return `<div class="v445caja" style="border-top:1px solid #eee;padding:5px 0;font-size:12px"><b>${E(o.act)}</b> · ${E(F(N(o.cant),2))} ${E(o.un)} · <span style="color:${(EVT[o.est]||['', '#555'])[1]}">${E((EVT[o.est]||[o.est])[0])}</span>${o.vpor?' ('+E(o.vpor)+')':''}
+    ${o.vobs?`<br><i style="color:#b71c1c">Obs. validación: ${E(o.vobs)}</i>`:''}${cu&&!hx?`<br><span style="color:#ef6c00">⚠ Transporte ${cu}</span>`:''}
+    ${activa?`<div style="display:flex;gap:6px;margin-top:4px">${hx?`<button type="button" disabled style="flex:1;background:#eceff1;color:#777;border:0;border-radius:6px;padding:5px">${E(ART[hx])} fue rechazad${hx=='mezcla'?'a':'o'}</button>`:`<button type="button" onclick="validarObra('${E(o.id)}','${E(p[1])}')" style="flex:1;background:#2e7d32;color:#fff;border:0;border-radius:6px;padding:5px">✓ ${E(p[1])}</button>`}<button type="button" onclick="validarObra('${E(o.id)}','rechazado')" style="flex:1;background:#b71c1c;color:#fff;border:0;border-radius:6px;padding:5px">✕ Rechazar</button></div>`:`<div style="font-size:11px;color:#777">⏳ espera ${E(VAL_ESPERA[o.est]||'a otro rol')}</div>`}</div>`;}).join('');
+  if(otras.length)h+=`<div style="font-size:11px;color:#555;border-top:1px dashed #ccc;margin-top:4px;padding-top:4px">Otras cajas del sitio: ${otras.map(x=>`${E(x.act)} ${E(F(N(x.cant),2))} ${E(x.un||'')} <b style="color:${(EVT[x.ev]||['', '#555'])[1]}">${E((EVT[x.ev]||[x.ev])[0])}</b>${x.ev=='rechazado'&&x.vobs?' «'+E(x.vobs)+'»':''}`).join(' · ')}</div>`;
+  h+=`<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap"><button type="button" onclick="masCerrar();ficha('${E(o0.cod)}',true)" style="flex:1;background:#fff;color:#004A61;border:1px solid #004A61;border-radius:6px;padding:6px">Ver tramo</button>`;
+  if(activa&&os.length>1)h+=`<button type="button" onclick="v445SitioAccion('${E(k)}','${E(p[1])}')" style="flex:2;background:#1b5e20;color:#fff;border:0;border-radius:6px;padding:6px;font-weight:bold">✓ ${E(p[1])} todo el sitio (${os.length-hu.length})</button><button type="button" onclick="v445SitioAccion('${E(k)}','rechazado')" style="flex:2;background:#7f0000;color:#fff;border:0;border-radius:6px;padding:6px;font-weight:bold">✕ Rechazar todo el sitio (${os.length})</button>`;
+  return h+'</div></div>';};
+ const opcional=p[0]=='validado'&&!exigeGestor();
+ let h=`<div style="font-size:12px;color:#555;margin:4px 0 8px"><b>${E(p[2])}</b>: obras de los contratistas que están en «${E(p[0])}»${z?' en <b>'+E(z)+'</b>':''}, <b>agrupadas por sitio</b> (todas las cajas del mismo parche juntas). Puede revisar o rechazar el sitio completo de una vez; el transporte sigue a su fresado o a su mezcla. Cada rol aprueba en su turno: inspector → coordinador junior → gestor.</div>`;
+ if(opcional)h+=`<div style="font-size:12px;background:#e3f2fd;border-radius:8px;padding:6px 9px;margin-bottom:6px">ℹ Su visto bueno es <b>opcional</b>: las actas salen con lo validado por el coordinador junior.</div>`;
+ const G=grupos(L);h+=G.length?G.map(g=>tarjSitio(g,true)).join(''):'<div style="padding:14px;color:#666;text-align:center">No hay obras pendientes en su paso.</div>';
+ if(esp.length){const Ge=grupos(esp);h+=`<div style="font-size:13px;font-weight:bold;color:#555;margin:12px 0 2px">⏳ En camino (${esp.length} en ${Ge.length} sitio(s)): esperan a otro rol</div>`+Ge.slice(0,60).map(g=>tarjSitio(g,false)).join('');}
+ masPanel('✅ Validar obras',h);}
+// aplicar un paso a varias cajas (lo mismo que hace «✓» o «✕» en una caja, con una sola pregunta)
+function aplicar(ids,estado,obs){const p=miPaso();const PV=(VV().por_validar||[]);let n=0;const no=[];
+ ids.forEach(id=>{const o=PV.find(x=>x.id==id);if(!o||o.est!=p[0]||!valZonaOk(o)){no.push(id);return;}if(estado!='rechazado'&&huerfano(o)){no.push(id);return;}
+  regSistema('validacion',{id_obra:id,estado:estado,observacion:String(obs||'').trim()});try{const H=JSON.parse(localStorage.getItem('pms_validadas')||'[]');H.push({id:id,estado:estado,f:new Date().toISOString()});localStorage.setItem('pms_validadas',JSON.stringify(H.slice(-500)));}catch(e){}n++;});
+ try{validarPanel();validarBoton();}catch(e){}return {n,no};}
+W.v445Aplicar=aplicar;
+W.v445SitioAccion=function(k,estado){const p=miPaso();if(!p)return;const os=porValidar().filter(o=>sitioDe(o)==k);if(!os.length)return;
+ if(estado=='rechazado'){const m=prompt(`¿Por qué se rechaza el sitio completo (${os.length} caja(s))? Lo verá el contratista.\n(Si es un registro de prueba, escriba solo: PRUEBA)`)||'';if(!m.trim())return;const r=aplicar(os.map(o=>o.id),'rechazado',m);avisoV(`✕ ${r.n} caja(s) del sitio rechazadas.`);return;}
+ const hu=os.filter(o=>huerfano(o));const ok=os.filter(o=>!hu.includes(o));
+ if(!confirm(`¿Pasar a «${p[1]}» las ${ok.length} caja(s) de este sitio?`+(hu.length?`\n\n${hu.length} transporte(s) NO pasan porque su fresado o su mezcla fue rechazado: recháselos.`:'')))return;
+ const obs=prompt('Observación (opcional)')||'';const r=aplicar(ok.map(o=>o.id),p[1],obs);avisoV(`✓ ${r.n} caja(s) del sitio pasaron a «${p[1]}».`);};
+const avisoV=t=>{try{avisoCorto(t);}catch(e){}};
+if(typeof W.validarPanel==='function'){const _vp=W.validarPanel;W.validarPanel=function(){try{return v445ValidarPanel();}catch(e){console.error('v445 validarPanel',e);return _vp.apply(this,arguments);}};try{validarPanel=W.validarPanel;}catch(e){}}
+if(typeof W.validarObra==='function'){const _vo=W.validarObra;W.validarObra=function(id,estado){try{const p=miPaso();const o=(VV().por_validar||[]).find(x=>x.id==id);
+  if(p&&o&&o.est==p[0]&&valZonaOk(o)){
+   if(estado!='rechazado'){const hx=huerfano(o);if(hx){alert(`Este transporte no puede pasar: ${ART[hx]} de ese mismo sitio fue rechazad${hx=='mezcla'?'a':'o'}. El transporte sigue a su caja: recháselo.`);return;}}
+   else{const m=prompt('¿Por qué se rechaza? (lo verá el contratista)\n(Si es un registro de prueba, escriba solo: PRUEBA)')||'';if(!m.trim())return;
+    const k=sitioDe(o);const resto=porValidar().filter(x=>x.id!=id&&sitioDe(x)==k);let ids=[id];
+    const deps=resto.filter(x=>MADRE[famCaja(x.act)]&&MADRE[famCaja(x.act)]==famCaja(o.act));
+    if(resto.length&&/\bpr\b|trayecto|ubicaci|calzada|carril|sitio|lugar|abscisa|gps/i.test(m)&&confirm(`El motivo es de ubicación. ¿Rechazo también las otras ${resto.length} caja(s) de este sitio?`))ids=ids.concat(resto.map(x=>x.id));
+    else if(deps.length&&confirm(`El transporte sigue a su caja. ¿Rechazo también ${deps.length===1?'el transporte':'los '+deps.length+' transportes'} de ${ART[famCaja(o.act)]||'esta caja'} (${deps.map(x=>x.act).join(', ')})?`))ids=ids.concat(deps.map(x=>x.id));
+    const r=aplicar(ids,'rechazado',m);avisoV(`✕ ${r.n} caja(s) rechazada(s).`);return;}}}catch(e){console.error('v445 validarObra',e);}
+  return _vo.apply(this,arguments);};try{validarObra=W.validarObra;}catch(e){}}
+
+// ---------------------------------------------------------------- (5) PRUEBAS fuera de las listas del contratista y de los rechazos
+if(typeof W.apVisibles==='function'){const _av=W.apVisibles;W.apVisibles=function(){const L=_av.apply(this,arguments);try{const r=rolYo();
+  if(esContratista()||r=='contratista')return L.filter(x=>!esPrueba(x));}catch(e){}return L;};}
+if(typeof W.actConciliacion==='function'){const _ac=W.actConciliacion;W.actConciliacion=function(){const K=_ac.apply(this,arguments);try{K.rech=(K.rech||[]).filter(x=>!esPrueba(x));K.faltan=(K.faltan||[]).filter(x=>!esPrueba(x));}catch(e){}return K;};}
+// solicitudes de acta repetidas: se muestra una sola
+if(typeof W.actasDe==='function'){const _ad=W.actasDe;W.actasDe=function(ctr){const A=_ad.apply(this,arguments)||[];try{const gen=A.filter(a=>['generada','firmada'].includes(a.est));const t=s=>{const d=new Date(String(s||'').replace(' ','T'));return isNaN(d)?null:d.getTime();};
+  return A.filter(a=>{if(a.est=='repetida')return false;if(a.est!='no generada')return true;const ta=t(a.pf);return !gen.some(g=>g.d==a.d&&g.h==a.h&&ta!=null&&t(g.pf)!=null&&Math.abs(ta-t(g.pf))<=600000);});}catch(e){return A;}};}
+
+// ---------------------------------------------------------------- (2) acta: freno por mayores cantidades
+function excesoActa(ctr,d,h){const c=ctrs().find(x=>x.contrato==ctr);if(!c)return [];const K=W.actConciliacion(ctr,d,h);const pres={};
+ (K.con||[]).forEach(x=>{const it=itemDe(c,x.act);if(it)pres[kIt(it)]=(pres[kIt(it)]||0)+N(x.cant);});
+ const prev=actasCtr(ctr).filter(a=>['generada','firmada','importada'].includes(a.est));const qp=qActas(c,prev)||{};
+ const A=((VV().avance_contratos||{})[ctr])||[];const val={};A.forEach(a=>{const it=itemDe(c,a.act);if(it)val[kIt(it)]=(val[kIt(it)]||0)+N(a.val);});
+ const qm=qActas(c,actasMano(c))||{};const out=[];
+ (c.items||[]).forEach(i=>{const k=kIt(i);const q0=pres[k]||0;if(!q0)return;const acum=Math.max((qp[k]||0)+q0,(qm[k]||0)+(val[k]||0));const cap=N(i.cantidad);
+  if(acum>cap+Math.max(0.005*cap,0.01))out.push(`${i.actividad}: acumulado ${F(acum,2)} de ${F(cap,2)} ${i.unidad||''} contratados${cap?'':' (ítem sin cantidad contratada)'}`);});return out;}
+W.v445ExcesoActa=excesoActa;
+const confirmaRol=()=>['gestor','administrador'].includes(rolYo());
+if(typeof W.actRevisar==='function'){const _ar=W.actRevisar;W.actRevisar=function(ctr){const r=_ar.apply(this,arguments);try{const z=$$('actcon');const d=($$('actd')||{}).value,h=($$('acth')||{}).value;if(!z||!d||!h)return r;
+  const ex=excesoActa(ctr,d,h);if(!ex.length)return r;const b=$$('actgen');
+  z.insertAdjacentHTML('beforeend',`<div id="v445ex" style="margin-top:6px;background:#ffebee;border-left:5px solid #c62828;border-radius:8px;padding:7px 9px;font-size:12px"><b>⚠ Se pasa de lo contratado</b> (mayor cantidad):<br>${ex.map(x=>'• '+E(x)).join('<br>')}<br>`+
+   (confirmaRol()?`<label style="display:block;margin-top:5px;font-size:13px"><input type="checkbox" id="v445conf" onchange="var b=document.getElementById('actgen');if(b&&!b.dataset.v445no){b.disabled=!this.checked;b.style.background=this.checked?'#004A61':'#9e9e9e';}"> <b>Confirmo las mayores cantidades</b> (queda escrito en el acta con mi nombre)</label>`
+    :`<b style="color:#b71c1c">Solo el gestor o el administrador pueden confirmar mayores cantidades:</b> pídales que generen esta acta.`)+`</div>`);
+  if(b){if(b.disabled)b.dataset.v445no='1';else delete b.dataset.v445no;b.disabled=true;b.style.background='#9e9e9e';}}catch(e){console.error('v445 actRevisar',e);}return r;};}
+if(typeof W.actGenerar==='function'){const _ag=W.actGenerar;W.actGenerar=function(ctr){try{const d=($$('actd')||{}).value,h=($$('acth')||{}).value;
+  // una sola solicitud: si ya la pidió (mismo contrato y período) y el PC no ha respondido, no se manda otra
+  let L={};try{L=JSON.parse(localStorage.getItem('pms_actas_loc')||'{}')||{};}catch(e){}
+  const ya=Object.values(L).find(x=>x&&x.sol&&x.ctr==ctr&&x.d==d&&x.h==h&&!actasCtr(ctr).some(a=>a.sol==x.sol));
+  if(ya){alert(`Ya pidió esta acta (${d} al ${h}) el ${ya.f||''}. El PC la arma en la próxima publicación: no hace falta pedirla otra vez.`);return;}
+  const ex=excesoActa(ctr,d,h);
+  if(ex.length){if(!confirmaRol()){alert('Esta acta se pasa de lo contratado:\n• '+ex.join('\n• ')+'\n\nSolo el gestor o el administrador pueden confirmar mayores cantidades: pídales que la generen.');return;}
+   if(!($$('v445conf')||{}).checked){alert('Marque «Confirmo las mayores cantidades» para generar esta acta.');return;}
+   const _rs=W.regSistema;W.regSistema=function(t,o){if(t=='acta'&&o&&o.accion=='generar'){o.confirmar_exceso=1;o.excesos=ex.slice(0,10);}return _rs.apply(this,arguments);};
+   try{regSistema=W.regSistema;}catch(e){}
+   try{return _ag.apply(this,arguments);}finally{W.regSistema=_rs;try{regSistema=_rs;}catch(e){}}}}catch(e){console.error('v445 actGenerar',e);}
+  return _ag.apply(this,arguments);};}
+
+// ---------------------------------------------------------------- (6) bitácora: la hora de fin no queda antes que la de inicio
+if(typeof W.bitacoraGuardar==='function'){const _bg=W.bitacoraGuardar;W.bitacoraGuardar=function(){try{const i=$$('bhi'),f=$$('bhf');
+  if(i&&f&&i.value&&f.value&&f.value<i.value){const [hh,mm]=f.value.split(':').map(Number);const alt=hh<12?`${String(hh+12).padStart(2,'0')}:${String(mm).padStart(2,'0')}`:'';
+   if(alt&&alt>i.value&&confirm(`La hora de fin (${f.value}) queda antes que la de inicio (${i.value}).\n¿Quiso decir ${hh}:${String(mm).padStart(2,'0')} p. m. (${alt})?`)){f.value=alt;try{bitacoraFrenteTxt();}catch(e){}}
+   else if(!confirm(`La hora de fin (${f.value}) queda antes que la de inicio (${i.value}).\n¿El turno pasó la medianoche y terminó al día siguiente?\n\n(Si no, toque «Cancelar» y corrija las horas.)`))return;
+   else{const h=$$('bhoras');if(h&&!/día siguiente/.test(h.value))h.value=(h.value||(i.value+' – '+f.value))+' (terminó al día siguiente)';}}}catch(e){console.error('v445 bitácora',e);}
+  return _bg.apply(this,arguments);};try{bitacoraGuardar=W.bitacoraGuardar;}catch(e){}}
+
+// ---------------------------------------------------------------- (6) calculadora de m² para marcas viales
+const FIGURAS=['Banda (reductor o alerta)','Flecha','Pictograma','Paso peatonal (franja de cebra)','Letra o número','Otra figura'];
+const esPintura=a=>/pintura|marca|demarcaci|linea|línea|pictograma|cebra/i.test(String(a||''));
+function actSel(){try{return (ACTIV[+$$('cact').value]||[])[0]||'';}catch(e){return '';}}
+function unidadSel(){try{return (ACTIV[+$$('cact').value]||[])[1]||'';}catch(e){return '';}}
+let CALC=[];
+function calcPintar(){const z=$$('v445pint');if(!z)return;const tot=CALC.reduce((s,x)=>s+x.n*x.l*x.a,0);
+ z.innerHTML=`<div style="font-weight:bold;color:#004A61">🧮 Calculadora de m² de marcas viales</div><div style="font-size:11px;color:#455a64">Escoja la figura, cuántas son y sus medidas (las del manual de señalización). El sistema calcula los m².</div>
+  <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:4px"><select id="v445fig" style="max-width:150px">${FIGURAS.map(f=>`<option>${E(f)}</option>`).join('')}</select>
+  <input id="v445n" type="number" min="1" step="1" placeholder="cuántas" style="width:62px"> × largo <input id="v445l" type="number" min="0" step="0.01" placeholder="m" style="width:56px"> × ancho <input id="v445a" type="number" min="0" step="0.01" placeholder="m" style="width:56px">
+  <button type="button" onclick="v445CalcAgregar()" style="border:1px solid #2e7d32;color:#2e7d32;background:#fff;border-radius:6px;padding:4px 8px">➕</button></div>
+  ${CALC.length?`<div style="margin-top:4px">${CALC.map((x,i)=>`• ${x.n} × ${E(x.f.toLowerCase())} de ${F(x.l,2)} × ${F(x.a,2)} m = <b>${F(x.n*x.l*x.a,2)} m²</b> <span onclick="v445CalcQuitar(${i})" style="color:#b71c1c;cursor:pointer">✕</span>`).join('<br>')}</div>
+  <div style="margin-top:4px"><b>Total: ${F(tot,2)} m²</b> <button type="button" onclick="v445CalcUsar()" style="background:#004A61;color:#fff;border:0;border-radius:6px;padding:5px 9px">Usar este total en la cantidad</button></div>`:''}`;}
+W.v445CalcAgregar=function(){const n=N(($$('v445n')||{}).value),l=N(($$('v445l')||{}).value),a=N(($$('v445a')||{}).value);if(!(n>0&&l>0&&a>0)){alert('Escriba cuántas son, el largo y el ancho (en metros).');return;}
+ if(l*a>50&&!confirm(`Cada figura mediría ${F(l*a,2)} m². ¿Está bien (largo y ancho en METROS)?`))return;CALC.push({f:($$('v445fig')||{}).value||'Figura',n:Math.round(n),l:l,a:a});calcPintar();};
+W.v445CalcQuitar=function(i){CALC.splice(i,1);calcPintar();};
+W.v445CalcUsar=function(){const tot=CALC.reduce((s,x)=>s+x.n*x.l*x.a,0);if(!(tot>0))return;const q=$$('ccant');if(q){q.value=+tot.toFixed(2);try{costoCalc();}catch(e){}}
+ const o=$$('cobs');const txt='Cálculo: '+CALC.map(x=>`${x.n} × ${x.f.toLowerCase()} de ${F(x.l,2)}×${F(x.a,2)} m`).join(' + ')+` = ${F(tot,2)} m²`;if(o&&!o.value.includes('Cálculo:'))o.value=(o.value?o.value+' · ':'')+txt;avisoV('✔ Cantidad: '+F(tot,2)+' m²');};
+W.v445LargoPR=function(){const p=s=>{s=String(s||'').trim();if(!s)return null;const m=/(\d+)\s*\+\s*(\d+)/.exec(s);if(m)return (+m[1])*1000+(+m[2]);const n=parseFloat(s);return isFinite(n)?n:null;};
+ const a=p(($$('cpri')||{}).value),b=p(($$('cprf')||{}).value);const z=$$('v445ml');if(a==null||b==null){if(z)z.innerHTML='<span style="color:#b71c1c">Escriba el PR inicial y el PR final del tramo pintado.</span>';return;}
+ if(a==b){if(z)z.innerHTML='<span style="color:#b71c1c">⚠ El PR inicial y el final son iguales: la línea no tiene largo. Corrija el PR final.</span>';return;}
+ const L=Math.abs(b-a);if(z)z.innerHTML=`Largo del tramo: <b>${F(L,0)} m</b> (si pintó varias líneas, multiplique). <button type="button" onclick="document.getElementById('ccant').value=${L};try{costoCalc()}catch(e){}" style="border:1px solid #004A61;color:#004A61;background:#fff;border-radius:6px;padding:3px 7px">Usar ${F(L,0)} ml</button>`;};
+function pinturaUI(){try{const un=unidadSel(),act=actSel();const cont=$$('cobra');if(!cont)return;let z=$$('v445pint'),y=$$('v445mlw');
+ const senal=(()=>{try{return typeof vcEsSenal=='function'&&vcEsSenal();}catch(e){return false;}})();
+ const m2=esPintura(act)&&/m²|m2/.test(un)&&(senal||/pintura|marca/i.test(act));const ml=esPintura(act)&&/^ml$|^m$/.test(un)&&(senal||/pintura/i.test(act));
+ if(m2){if(!z){const ref=$$('ccalc');(ref||$$('ccant')).insertAdjacentHTML(ref?'beforebegin':'afterend','<div id="v445pint" style="margin:4px 0;background:#f3e5f5;border-radius:6px;padding:5px 7px;font-size:12px"></div>');}calcPintar();}else if(z)z.remove();
+ if(ml){if(!y){const ref=$$('ccalc');(ref||$$('ccant')).insertAdjacentHTML(ref?'beforebegin':'afterend','<div id="v445mlw" style="margin:4px 0;background:#e3f2fd;border-radius:6px;padding:5px 7px;font-size:12px">📏 Este ítem se paga en <b>metros lineales (ml)</b>. <button type="button" onclick="v445LargoPR()" style="border:0;background:#004A61;color:#fff;border-radius:6px;padding:3px 7px">Calcular el largo con los PR</button><div id="v445ml"></div></div>');}}else if(y)y.remove();
+ const u=$$('cuni');if(u)u.style.fontWeight=(m2||ml)?'bold':'';}catch(e){console.error('v445 pintura',e);}}
+W.v445PinturaUI=pinturaUI;
+if(typeof W.campoUnidad==='function'){const _cu=W.campoUnidad;W.campoUnidad=function(){const r=_cu.apply(this,arguments);pinturaUI();return r;};try{campoUnidad=W.campoUnidad;}catch(e){}}
+// la regla del registro: si la línea (ml) tiene el PR inicial igual al final, se pregunta antes de guardar
+if(typeof W.guardarCampo==='function'){const _gc=W.guardarCampo;W.guardarCampo=function(){try{if($$('ctipo')&&$$('ctipo').value=='obra'&&$$('v445mlw')){const a=String(($$('cpri')||{}).value||'').trim(),b=String(($$('cprf')||{}).value||'').trim();
+  if(a&&b&&a.replace(/\s/g,'')==b.replace(/\s/g,'')&&!confirm('El PR inicial y el final son iguales: la línea no tendría largo. ¿Guardar así de todos modos?'))return;}}catch(e){}return _gc.apply(this,arguments);};try{guardarCampo=W.guardarCampo;}catch(e){}}
+})();
 </script></body></html>
