@@ -7016,4 +7016,98 @@ if(typeof W.campoUnidad==='function'){const _cu=W.campoUnidad;W.campoUnidad=func
 if(typeof W.guardarCampo==='function'){const _gc=W.guardarCampo;W.guardarCampo=function(){try{if($$('ctipo')&&$$('ctipo').value=='obra'&&$$('v445mlw')){const a=String(($$('cpri')||{}).value||'').trim(),b=String(($$('cprf')||{}).value||'').trim();
   if(a&&b&&a.replace(/\s/g,'')==b.replace(/\s/g,'')&&!confirm('El PR inicial y el final son iguales: la línea no tendría largo. ¿Guardar así de todos modos?'))return;}}catch(e){}return _gc.apply(this,arguments);};try{guardarCampo=W.guardarCampo;}catch(e){}}
 })();
+</script><script>
+(function(){if(typeof DATA!=='undefined'&&DATA!=='Campo')return;
+// ============================================================================================================================
+// v446 · PARCHE SIN REPETIDOS (mejora mmwv6413noxmp de Darwin Garay, aprobada por Erix el 27-nov-2026 22:32)
+//  «El contratista se confunde y reporta varios ítems en un mismo parche» (pantallazo: el mismo parche aparece dos veces en Validar obras).
+//  Con la caja de medidas (v328) el contratista solo escribe largo, ancho y espesor y TODOS los ítems del parche se calculan solos.
+//  Lo que faltaba:
+//  (1) Si con la caja de medidas activa el contratista además agrega a mano una caja de un ítem que ya se calcula solo (fresado, riego,
+//      mezcla, geomalla o transportes), la app no la deja agregar y, al guardar, quita las que ya estaban (preguntando), para que el
+//      mismo ítem no quede dos veces en el parche.
+//  (2) Antes de guardar una obra, si ya hay un registro del mismo ítem, contrato, sección y fecha con PR que se cruza (en el celular, en
+//      la cadena de validación o ya recibido), la app lo muestra y pregunta si es otro trabajo distinto.
+//  (3) En «Validar obras», la tarjeta del sitio dice si es un solo parche (sus ítems se calcularon solos) y avisa en rojo cuando un
+//      ítem aparece repetido en el sitio, para rechazar el repetido con el motivo «repetido».
+//  (4) La observación de cada caja lleva una sola etiqueta «[caja i de n …]» (antes se repetía la de la caja 1 en las demás).
+// Todo envuelve funciones que ya existen (se guarda la original y se llama); si algo falla, queda lo de antes.
+// ============================================================================================================================
+const W=window;const $$=id=>document.getElementById(id);
+const VV=()=>{try{return (typeof VERSION!=='undefined'&&VERSION)||{};}catch(e){return {};}};
+const E=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const N=v=>{const x=parseFloat(String(v==null?'':v).replace(',','.'));return isFinite(x)?x:NaN;};
+const F=(v,d)=>{const x=+v;if(!isFinite(x))return '—';return x.toLocaleString('es-CO',{minimumFractionDigits:0,maximumFractionDigits:d});};
+const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
+const prT=v=>{const n=N(v);if(!isFinite(n))return '';try{return prTxt(n);}catch(e){return String(v);}};
+const esPrueba=x=>{try{return typeof W.v445EsPrueba=='function'&&W.v445EsPrueba(x);}catch(e){return false;}};
+const base=id=>String(id||'').replace(/_\d+$/,'');
+const RE_TAG=/\[caja \d+ de \d+ del mismo sitio · total del sitio [^\]]*\]\s*/g;
+const cruza=(a1,a2,b1,b2)=>{if(![a1,a2,b1,b2].every(isFinite))return true;const lo1=Math.min(a1,a2),hi1=Math.max(a1,a2),lo2=Math.min(b1,b2),hi2=Math.max(b1,b2);return lo1<=hi2+1&&lo2<=hi1+1;};
+const EST={registrado:'registrada',revisado:'revisada',validado:'validada',aprobado:'aprobada'};
+
+// ---------------------------------------------------------------- ítems que la caja de medidas calcula sola
+function c75Activa(){return !!($$('c75on')&&$$('c75on').checked&&typeof W.c75Items=='function');}
+function aisAuto(){try{const T=W.c75Items();if(!T)return new Set();const s=new Set();[T.fres,T.riego,T.geo,T.trf,T.trm].concat(T.mez||[]).forEach(x=>{if(x&&x.ai!=null)s.add(+x.ai);});return s;}catch(e){return new Set();}}
+const nombreAct=ai=>{try{return ACTIV[ai][0];}catch(e){return '';}};
+
+// (1a) «Agregar caja»: no deja agregar a mano un ítem que la caja de medidas ya calcula
+if(typeof W.obraAgregarCaja==='function'){const _ag=W.obraAgregarCaja;W.obraAgregarCaja=function(){try{if(c75Activa()&&$$('cact')){const ai=+$$('cact').value;const S=aisAuto();
+   if(S.has(ai)){alert(`No hace falta agregar «${nombreAct(ai)}» a mano: con la caja de medidas (largo, ancho y espesor) este ítem se calcula solo junto con los demás del parche.\n\nSi lo agrega a mano quedaría repetido en el mismo parche. Escriba las medidas y pulse Guardar.`);return;}}}catch(e){console.error('v446 agregar caja',e);}
+  return _ag.apply(this,arguments);};try{obraAgregarCaja=W.obraAgregarCaja;}catch(e){}}
+
+// ---------------------------------------------------------------- (2) ¿ya hay un registro igual?
+function registrosIguales(cod,ctr,fe,p1,p2,acts){const A=new Set(acts.map(norm).filter(Boolean));if(!A.size||!fe)return [];const out=[];const ya=new Set();
+ const mismo=(c,co,f,act)=>String(c||'')==String(ctr||'')&&String(co||'')==String(cod||'')&&String(f||'').slice(0,10)==fe&&A.has(norm(act));
+ try{(registros()||[]).forEach(r=>{if(r.tipo!='obra'||ya.has(r.id))return;if(!mismo(r.contrato,r.codigo,r.fecha,r.actividad)||!cruza(N(r.pr_ini),N(r.pr_fin),p1,p2))return;ya.add(r.id);
+   out.push({act:r.actividad,cant:r.cantidad,un:r.unidad,p1:r.pr_ini,p2:r.pr_fin,donde:'guardado en este celular, sin enviar'});});}catch(e){}
+ (VV().por_validar||[]).forEach(o=>{if(ya.has(o.id)||o.est=='rechazado'||esPrueba(o))return;if(!mismo(o.contrato,o.cod,o.fecha,o.act)||!cruza(N(o.p1),N(o.p2),p1,p2))return;ya.add(o.id);
+   out.push({act:o.act,cant:o.cant,un:o.un,p1:o.p1,p2:o.p2,donde:'ya enviado · '+(EST[o.est]||o.est)});});
+ (VV().recibidos||[]).forEach(x=>{if(!x.act||ya.has(x.id)||x.ev=='rechazado'||esPrueba(x))return;if(!mismo(x.c,x.cod,x.fe,x.act)||!cruza(N(x.p1),N(x.p2),p1,p2))return;ya.add(x.id);
+   out.push({act:x.act,cant:x.cant,un:x.un,p1:x.p1,p2:x.p2,donde:'ya enviado · '+(EST[x.ev]||x.ev||'registrada')});});
+ return out;}
+W.v446RegistrosIguales=registrosIguales;
+
+if(typeof W.guardarCampo==='function'){const _gc=W.guardarCampo;W.guardarCampo=function(cod){try{
+  if($$('ctipo')&&$$('ctipo').value=='obra'&&$$('cact')&&ACTIV[+$$('cact').value]){
+   // (1b) cajas agregadas a mano que la caja de medidas ya calcula → quedarían repetidas
+   if(c75Activa()&&typeof OBRA_CAJAS!=='undefined'&&Array.isArray(OBRA_CAJAS)&&OBRA_CAJAS.length){const S=aisAuto();
+    const rep=OBRA_CAJAS.filter(c=>!c._c75&&S.has(+c.ai));
+    if(rep.length){if(!confirm(`Con la caja de medidas, el sistema ya calcula solos todos los ítems del parche.\n\nUsted además agregó a mano:\n${rep.map(c=>'• '+c.actividad+' · '+F(c.cantidad,2)+' '+(c.unidad||'')).join('\n')}\n\nAsí quedarían repetidos en el mismo parche. ¿Los quito y guardo el parche solo con lo calculado?\n(Cancelar: no guarda, para que usted revise)`))return;
+     OBRA_CAJAS=OBRA_CAJAS.filter(c=>!rep.includes(c));try{obraCajasRender();}catch(e){}}}
+   // (2) el mismo ítem, contrato, sección y fecha con PR que se cruza
+   let acts=[];const k=c75Activa()&&typeof W.c75calc=='function'?W.c75calc():null;
+   if(k&&k.fil&&k.fil.length)acts=k.fil.map(f=>nombreAct(f.x.ai));else{acts=[nombreAct(+$$('cact').value)];try{(OBRA_CAJAS||[]).forEach(c=>acts.push(c.actividad));}catch(e){}}
+   const f=(typeof FICHA!=='undefined'&&FICHA[cod])||{};let p1=null,p2=null;try{p1=prNum($$('cpri').value);p2=prNum($$('cprf').value);}catch(e){}
+   if(p1==null)p1=N(f.pri);if(p2==null)p2=isFinite(N(f.prf))?N(f.prf):p1;
+   let dest=cod;try{const dT=$$('ctray')?$$('ctray').value:String(f.t),dCz=$$('ccz')?$$('ccz').value:f.cz,dCar=$$('ccar')?$$('ccar').value:f.car;dest=seccionDe(dT,dCz,dCar,p1)||cod;}catch(e){}
+   const ctr=$$('ccontrato')?$$('ccontrato').value:'';const fe=$$('cfecha')?$$('cfecha').value:'';
+   const ig=registrosIguales(dest,ctr,fe,p1,p2,acts);
+   if(ig.length){const t=ig.slice(0,6).map(x=>`• ${x.act} · ${F(N(x.cant),2)} ${x.un||''} · PR ${prT(x.p1)}${isFinite(N(x.p2))&&Math.round(N(x.p2))!=Math.round(N(x.p1))?'–'+prT(x.p2):''} (${x.donde})`).join('\n');
+    if(!confirm(`⚠ Ya hay ${ig.length===1?'un registro':ig.length+' registros'} de lo mismo en este sitio y esta fecha (${fe}):\n\n${t}${ig.length>6?'\n…':''}\n\n¿Es OTRO trabajo distinto (otro parche u otra línea)?\nAceptar: sí, es otro y lo guardo.\nCancelar: no guardo (sería el mismo registro dos veces).`))return;}
+  }}catch(e){console.error('v446 guardar',e);}
+  return _gc.apply(this,arguments);};try{guardarCampo=W.guardarCampo;}catch(e){}}
+
+// ---------------------------------------------------------------- (4) una sola etiqueta «[caja i de n …]» por caja
+if(typeof W.setRegistros==='function'){const _sr=W.setRegistros;W.setRegistros=function(r){try{(r||[]).forEach(x=>{if(!x||!x.grupo||x.tipo!='obra')return;const o=String(x.observacion||'');const m=o.match(RE_TAG);if(!m||m.length<2)return;
+   const g=x.grupo;const tag=`[caja ${g.caja} de ${g.de} del mismo sitio · total del sitio `;const mio=m.find(t=>t.indexOf(tag)===0)||m[0];x.observacion=mio.trim()+' '+o.replace(RE_TAG,'').trim();x.observacion=x.observacion.trim();});}catch(e){console.error('v446 etiqueta caja',e);}
+  return _sr.apply(this,arguments);};try{setRegistros=W.setRegistros;}catch(e){}}
+
+// ---------------------------------------------------------------- (3) Validar obras: un solo parche / ítem repetido en el sitio
+function cajasDelSitio(k){const sd=W.v445SitioDe;if(typeof sd!='function')return [];const out=[];const ya=new Set();
+ (VV().por_validar||[]).forEach(o=>{if(sd(o)!=k||o.est=='rechazado'||esPrueba(o))return;ya.add(o.id);out.push({id:o.id,act:o.act,cant:o.cant,un:o.un,est:o.est,obs:o.obs});});
+ (VV().recibidos||[]).forEach(x=>{if(ya.has(x.id)||!x.act||x.ev=='rechazado'||esPrueba(x))return;if(sd({contrato:x.c,cod:x.cod,fecha:x.fe,p1:x.p1,p2:x.p2})!=k)return;out.push({id:x.id,act:x.act,cant:x.cant,un:x.un,est:x.ev||'registrado',obs:''});});
+ let hechas={};try{JSON.parse(localStorage.getItem('pms_validadas')||'[]').forEach(h=>hechas[h.id]=h.estado);}catch(e){}
+ return out.filter(x=>hechas[x.id]!='rechazado');}
+function avisoSitio(k){const S=cajasDelSitio(k);if(!S.length)return '';const B=new Map();S.forEach(x=>{const b=base(x.id);if(!B.has(b))B.set(b,[]);B.get(b).push(x);});
+ const G=new Map();S.forEach(x=>{const a=norm(x.act);if(!G.has(a))G.set(a,[]);G.get(a).push(x);});const rep=[...G.values()].filter(l=>l.length>1);let h='';
+ const grupoAuto=[...B.values()].some(l=>l.length>1);
+ if(B.size==1&&grupoAuto)h+=`<div class="v446parche" style="font-size:12px;background:#e8f5e9;border-radius:6px;padding:4px 7px;margin:4px 0;color:#1b5e20">🧩 <b>Un solo parche</b>: el contratista escribió una vez las medidas y sus ${S.length} ítems (fresado, riego, mezcla, transportes…) se calcularon solos. Revise el parche completo, no ítem por ítem.</div>`;
+ if(rep.length)h+=`<div class="v446repetido" style="font-size:12px;background:#ffebee;border-radius:6px;padding:5px 8px;margin:4px 0;color:#b71c1c;border-left:4px solid #b71c1c">⚠ <b>Posible registro repetido</b>${B.size>1?` · este sitio tiene <b>${B.size} registros</b> del mismo día`:''}:<br>${rep.map(l=>`• «${E(l[0].act)}» aparece ${l.length} veces: ${l.map(x=>E(F(N(x.cant),2))+' '+E(x.un||'')+' ('+E(EST[x.est]||x.est)+')').join(' · ')}`).join('<br>')}<br>Si es el mismo trabajo registrado dos veces, rechace el repetido con el motivo «repetido». Si son trabajos distintos, déjelo pasar.</div>`;
+ return h;}
+W.v446AvisoSitio=avisoSitio;
+function marcarSitios(){try{document.querySelectorAll('.v445sitio').forEach(d=>{if(d.querySelector('.v446parche,.v446repetido'))return;const k=d.getAttribute('data-sitio');if(!k)return;const h=avisoSitio(k);if(!h)return;
+   const cab=d.children[1]||d.firstElementChild;if(cab)cab.insertAdjacentHTML('afterend',h);else d.insertAdjacentHTML('afterbegin',h);});}catch(e){console.error('v446 marcar sitios',e);}}
+if(typeof W.validarPanel==='function'){const _vp=W.validarPanel;W.validarPanel=function(){const r=_vp.apply(this,arguments);marcarSitios();return r;};try{validarPanel=W.validarPanel;}catch(e){}}
+})();
 </script></body></html>
